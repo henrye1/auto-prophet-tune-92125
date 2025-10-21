@@ -32,6 +32,17 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
   const [stationarityVariable, setStationarityVariable] = useState<string>("dependent");
   const [acfVariable, setAcfVariable] = useState<string>("dependent");
   const [pacfVariable, setPacfVariable] = useState<string>("dependent");
+  const [beforeTransformData, setBeforeTransformData] = useState<any[]>([]);
+  const [afterTransformData, setAfterTransformData] = useState<any[]>([]);
+
+  // Prepare time series data for visualization
+  const getTimeSeriesData = (variable: string) => {
+    const column = variable === "dependent" ? valueColumn : variable;
+    return data.slice(0, 100).map(row => ({
+      date: row[dateColumn],
+      value: parseFloat(row[column]) || 0,
+    })).filter(d => !isNaN(d.value));
+  };
 
   const runStationarityTest = () => {
     // Mock ADF test - in production, this would call a backend function
@@ -91,6 +102,11 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
 
   const addTransformation = () => {
     if (selectedTransform !== "none") {
+      // Capture before transformation data
+      if (transformationChain.length === 0) {
+        setBeforeTransformData(getTimeSeriesData(selectedVariable));
+      }
+
       const newTransform = { 
         type: selectedTransform, 
         variable: selectedVariable,
@@ -99,8 +115,19 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
       setTransformationChain([...transformationChain, newTransform]);
       setSelectedTransform("none");
       
-      // Run stationarity test after adding transformation
+      // Simulate transformed data visualization
       setTimeout(() => {
+        const originalData = getTimeSeriesData(selectedVariable);
+        // Mock transformation effect
+        const transformed = originalData.map((d, i) => ({
+          ...d,
+          value: selectedTransform === 'log' ? Math.log(Math.abs(d.value) + 1) :
+                 selectedTransform === 'difference' && i > 0 ? d.value - originalData[i-1].value :
+                 d.value * 0.8 // Mock effect
+        }));
+        setAfterTransformData(transformed);
+
+        // Run stationarity test after adding transformation
         const mockTestAfter = {
           test_statistic: -3.8,
           p_value: 0.003,
@@ -118,6 +145,8 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
     setTransformationChain(updated);
     if (updated.length === 0) {
       setPostTransformTest(null);
+      setBeforeTransformData([]);
+      setAfterTransformData([]);
     }
   };
 
@@ -202,6 +231,46 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                   </Select>
                 </div>
 
+                {/* Time Series Visualization */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Time Series: {stationarityVariable === "dependent" ? valueColumn : stationarityVariable}</CardTitle>
+                    <CardDescription>Visual inspection is the foundation of good modeling - always look at your data first</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <LineChart data={getTimeSeriesData(stationarityVariable)}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis 
+                          dataKey="date" 
+                          tick={{ fontSize: 12 }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={60}
+                        />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--popover))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '0.5rem',
+                          }}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="value" 
+                          stroke="hsl(var(--primary))" 
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Look for: trends (upward/downward movement), seasonality (repeating patterns), variance changes (heteroskedasticity)
+                    </p>
+                  </CardContent>
+                </Card>
+
                 <div className="flex gap-2">
                   <Button onClick={runStationarityTest} variant="outline">
                     Run Augmented Dickey-Fuller Test
@@ -233,6 +302,9 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                         <p>P-value: {stationarityTest.p_value.toFixed(3)}</p>
                         <p>Critical Values: 1%={stationarityTest.critical_values["1%"]}, 5%={stationarityTest.critical_values["5%"]}, 10%={stationarityTest.critical_values["10%"]}</p>
                       </div>
+                      <p className="text-sm mt-2 italic">
+                        💡 Remember: Statistical tests confirm what you should see visually. If the chart shows clear trends or changing variance, the data is likely non-stationary.
+                      </p>
                       <p className="text-sm mt-2">{stationarityTest.recommendation}</p>
                     </div>
                   </AlertDescription>
@@ -270,6 +342,42 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Time Series Visualization */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Time Series: {acfVariable === "dependent" ? valueColumn : acfVariable}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={getTimeSeriesData(acfVariable)}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis 
+                          dataKey="date" 
+                          tick={{ fontSize: 12 }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={60}
+                        />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--popover))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '0.5rem',
+                          }}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="value" 
+                          stroke="hsl(var(--chart-2))" 
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
 
                 <Button onClick={calculateACF} variant="outline">
                   Calculate Autocorrelation Function
@@ -323,6 +431,42 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Time Series Visualization */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Time Series: {pacfVariable === "dependent" ? valueColumn : pacfVariable}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={getTimeSeriesData(pacfVariable)}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis 
+                          dataKey="date" 
+                          tick={{ fontSize: 12 }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={60}
+                        />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--popover))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '0.5rem',
+                          }}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="value" 
+                          stroke="hsl(var(--chart-3))" 
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
 
                 <Button onClick={calculatePACF} variant="outline">
                   Calculate Partial Autocorrelation Function
@@ -457,6 +601,57 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                   </Button>
                 </div>
 
+                {/* Before/After Transformation Visualization */}
+                {beforeTransformData.length > 0 && afterTransformData.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-sm">Before vs After Transformation</CardTitle>
+                      <CardDescription>Visual comparison shows the transformation effect better than any statistic</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <h5 className="text-xs font-semibold mb-2 text-muted-foreground">Before Transformation</h5>
+                        <ResponsiveContainer width="100%" height={150}>
+                          <LineChart data={beforeTransformData}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                            <YAxis tick={{ fontSize: 10 }} />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: 'hsl(var(--popover))',
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: '0.5rem',
+                              }}
+                            />
+                            <Line type="monotone" dataKey="value" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div>
+                        <h5 className="text-xs font-semibold mb-2 text-muted-foreground">After Transformation</h5>
+                        <ResponsiveContainer width="100%" height={150}>
+                          <LineChart data={afterTransformData}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                            <YAxis tick={{ fontSize: 10 }} />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: 'hsl(var(--popover))',
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: '0.5rem',
+                              }}
+                            />
+                            <Line type="monotone" dataKey="value" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Look for: reduced trend, stabilized variance, more uniform behavior around a constant mean
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* Post-Transformation Stationarity Test */}
                 {postTransformTest && (
                   <Alert variant={postTransformTest.is_stationary ? "default" : "destructive"}>
@@ -479,6 +674,9 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                           <p>Test Statistic: {postTransformTest.test_statistic.toFixed(3)}</p>
                           <p>P-value: {postTransformTest.p_value.toFixed(3)}</p>
                         </div>
+                        <p className="text-sm mt-2 italic">
+                          💡 Compare the before/after charts above - if the transformed data looks more stable with constant mean and variance, you're on the right track.
+                        </p>
                       </div>
                     </AlertDescription>
                   </Alert>
