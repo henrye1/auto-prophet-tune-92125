@@ -88,7 +88,6 @@ Return transformation recommendations for each variable.`;
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0.3,
       }),
     });
 

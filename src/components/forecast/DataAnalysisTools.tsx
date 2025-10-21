@@ -34,6 +34,7 @@ interface VariableState {
   afterData?: any[];
   beforeStats?: any;
   afterStats?: any;
+  featureImportance?: number;
 }
 
 export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, onTransformationApply }: DataAnalysisToolsProps) => {
@@ -42,7 +43,14 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
   const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
   const [selectedTransform, setSelectedTransform] = useState<string>("none");
 
-  const allVariables = ['dependent', ...(regressors || [])];
+  // Sort regressors by feature importance (highest first)
+  const sortedRegressors = (regressors || []).sort((a, b) => {
+    const importanceA = variableStates[a]?.featureImportance || 0;
+    const importanceB = variableStates[b]?.featureImportance || 0;
+    return importanceB - importanceA;
+  });
+  
+  const allVariables = ['dependent', ...sortedRegressors];
   const getVariableDisplayName = (variable: string) => 
     variable === 'dependent' ? valueColumn : variable;
 
@@ -146,6 +154,7 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
       newState.pacfData = testResults.after?.pacf || testResults.before.pacf;
       newState.beforeStats = testResults.before;
       newState.afterStats = testResults.after;
+      newState.featureImportance = testResults.featureImportance;
 
       // Mock transformation effect for visualization
       const originalData = getTimeSeriesData(selectedVariable);
@@ -307,7 +316,7 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
           <CardTitle className="text-sm">Variable Status</CardTitle>
           <CardDescription>Click on a variable to view and modify its transformations</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {allVariables.map(variable => {
               const state = variableStates[variable] || { status: 'pending', transformations: [] };
@@ -327,7 +336,14 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                     <Badge variant={variable === 'dependent' ? 'default' : 'outline'} className="text-xs">
                       {variable === 'dependent' ? 'Dependent' : 'Regressor'}
                     </Badge>
-                    {getStatusIcon(state.status)}
+                    <div className="flex items-center gap-1">
+                      {state.featureImportance !== undefined && variable !== 'dependent' && (
+                        <Badge variant="secondary" className="text-[10px] px-1">
+                          {state.featureImportance}
+                        </Badge>
+                      )}
+                      {getStatusIcon(state.status)}
+                    </div>
                   </div>
                   <div className="font-medium text-sm truncate">{getVariableDisplayName(variable)}</div>
                   <div className="text-xs text-muted-foreground mt-1">
@@ -340,6 +356,13 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
               );
             })}
           </div>
+          <Alert className="mt-3">
+            <Info className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              <span className="font-semibold">Feature Importance Score (0-100):</span> Higher scores indicate stronger predictive value. 
+              Based on correlation (60%), variance explained (20%), and stationarity (20%). Regressors are sorted by importance.
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
 

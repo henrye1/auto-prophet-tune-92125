@@ -188,6 +188,7 @@ serve(async (req) => {
     // Correlation with dependent variable (if provided)
     let correlationBefore = null;
     let correlationAfter = null;
+    let featureImportance = 0;
     
     if (dependentData && variable !== 'dependent') {
       const numericDependent = dependentData.map((v: any) => parseFloat(v)).filter((v: number) => !isNaN(v));
@@ -198,6 +199,22 @@ serve(async (req) => {
         if (transformedData.length >= 10) {
           correlationAfter = calculateCorrelation(numericDependent, transformedData);
         }
+        
+        // Calculate feature importance score (0-100)
+        // Based on: correlation strength (60%), variance explained (20%), stationarity (20%)
+        const corrScore = Math.abs(correlationAfter || correlationBefore || 0) * 60;
+        
+        // Variance score - how much variance the regressor explains
+        const depVariance = numericDependent.reduce((sum: number, val: number) => {
+          const mean = numericDependent.reduce((a: number, b: number) => a + b, 0) / numericDependent.length;
+          return sum + Math.pow(val - mean, 2);
+        }, 0) / numericDependent.length;
+        const varScore = Math.min((depVariance / 1000) * 20, 20); // normalized to 20
+        
+        // Stationarity score
+        const statScore = (afterADF?.is_stationary || beforeADF.is_stationary) ? 20 : 10;
+        
+        featureImportance = Math.round(corrScore + varScore + statScore);
       }
     }
     
@@ -215,6 +232,7 @@ serve(async (req) => {
         pacf: afterPACF,
         correlation: correlationAfter
       } : null,
+      featureImportance,
       transformedDataSample: transformedData.slice(0, 50)
     };
     
