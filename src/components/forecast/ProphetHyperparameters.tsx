@@ -30,10 +30,11 @@ export const ProphetHyperparameters = ({ parameters, onParametersChange }: Proph
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 bg-muted/50">
+          <TabsList className="grid w-full grid-cols-4 bg-muted/50">
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="seasonality">Seasonality</TabsTrigger>
             <TabsTrigger value="validation">Validation</TabsTrigger>
+            <TabsTrigger value="confidence">Confidence</TabsTrigger>
           </TabsList>
 
           <TabsContent value="general" className="space-y-6 mt-6">
@@ -215,6 +216,80 @@ export const ProphetHyperparameters = ({ parameters, onParametersChange }: Proph
                   />
                   <p className="text-xs text-muted-foreground">Forecast horizon to evaluate</p>
                 </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="confidence" className="space-y-6 mt-6">
+            <div className="space-y-6">
+              <div>
+                <h4 className="text-sm font-semibold mb-4">Confidence Interval Configuration</h4>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="interval-width">Default Interval Width</Label>
+                    <div className="flex items-center gap-4">
+                      <Slider
+                        id="interval-width"
+                        min={0.5}
+                        max={0.99}
+                        step={0.01}
+                        value={[parameters.interval_width || 0.80]}
+                        onValueChange={([v]) => updateParameter('interval_width', v)}
+                        className="flex-1"
+                      />
+                      <span className="text-sm font-medium w-16 text-right">
+                        {((parameters.interval_width || 0.80) * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Prophet's default confidence interval width (e.g., 0.80 = 80% CI)
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-muted/20 p-4">
+                <h4 className="text-sm font-semibold mb-3">Custom Percentiles (Optional)</h4>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Override with specific percentiles for asymmetric intervals
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="lower-bound">Lower Percentile</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="lower-bound"
+                        type="number"
+                        min={0}
+                        max={50}
+                        step={0.5}
+                        placeholder="e.g., 5"
+                        value={parameters.lower_bound !== undefined ? parameters.lower_bound * 100 : ''}
+                        onChange={(e) => updateParameter('lower_bound', e.target.value ? parseFloat(e.target.value) / 100 : undefined)}
+                      />
+                      <span className="text-sm text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="upper-bound">Upper Percentile</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="upper-bound"
+                        type="number"
+                        min={50}
+                        max={100}
+                        step={0.5}
+                        placeholder="e.g., 95"
+                        value={parameters.upper_bound !== undefined ? parameters.upper_bound * 100 : ''}
+                        onChange={(e) => updateParameter('upper_bound', e.target.value ? parseFloat(e.target.value) / 100 : undefined)}
+                      />
+                      <span className="text-sm text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Example: 5% and 95% creates a 90% asymmetric interval
+                </p>
               </div>
             </div>
           </TabsContent>

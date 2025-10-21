@@ -13,6 +13,9 @@ export interface ProphetParameters {
   cv_period: number;
   cv_horizon: number;
   custom_seasonalities?: CustomSeasonality[];
+  interval_width: number; // Confidence interval width (e.g., 0.80 for 80%)
+  lower_bound?: number; // Custom lower percentile (e.g., 0.05 for 5%)
+  upper_bound?: number; // Custom upper percentile (e.g., 0.95 for 95%)
 }
 
 export interface CustomSeasonality {

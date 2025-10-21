@@ -9,9 +9,90 @@ import { DataUpload } from "@/components/forecast/DataUpload";
 import { SegmentMapper } from "@/components/forecast/SegmentMapper";
 import { SegmentRegressorConfig } from "@/components/forecast/SegmentRegressorConfig";
 import { ForecastProgress } from "@/components/forecast/ForecastProgress";
+import { ForecastResults } from "@/components/forecast/ForecastResults";
 import { ChevronRight, Play } from "lucide-react";
 import { toast } from "sonner";
 import type { ForecastModel, ProphetParameters, SegmentConfig } from "@/types/forecast";
+import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
+
+// Helper function to generate mock forecast results
+const generateMockForecast = (
+  trainingData: any[],
+  testData: any[],
+  segment: SegmentConfig,
+  dateColumn: string,
+  dependentVariable: string,
+  prophetParams: ProphetParameters
+) => {
+  const lowerPercentile = prophetParams.lower_bound ?? (1 - prophetParams.interval_width) / 2;
+  const upperPercentile = prophetParams.upper_bound ?? (1 + prophetParams.interval_width) / 2;
+
+  // Training data with actual values
+  const training = trainingData.map(row => ({
+    date: row[dateColumn],
+    actual: parseFloat(row[dependentVariable]),
+    predicted: parseFloat(row[dependentVariable]),
+    lower_bound: parseFloat(row[dependentVariable]) * 0.95,
+    upper_bound: parseFloat(row[dependentVariable]) * 1.05,
+  }));
+
+  // Test data with predictions
+  const test = testData.map((row, idx) => {
+    const actual = parseFloat(row[dependentVariable]);
+    const noise = (Math.random() - 0.5) * 0.1;
+    const predicted = actual * (1 + noise);
+    const intervalWidth = upperPercentile - lowerPercentile;
+    return {
+      date: row[dateColumn],
+      actual,
+      predicted,
+      lower_bound: predicted * (1 - intervalWidth / 2),
+      upper_bound: predicted * (1 + intervalWidth / 2),
+      is_test: true,
+    };
+  });
+
+  // Generate forecast data
+  const lastDate = testData.length > 0 
+    ? new Date(testData[testData.length - 1][dateColumn])
+    : new Date(trainingData[trainingData.length - 1][dateColumn]);
+  
+  const avgValue = trainingData.reduce((sum, row) => sum + parseFloat(row[dependentVariable]), 0) / trainingData.length;
+  const forecast = [];
+  
+  for (let i = 1; i <= segment.forecast_periods; i++) {
+    const forecastDate = new Date(lastDate);
+    forecastDate.setMonth(forecastDate.getMonth() + i);
+    
+    const trend = 1 + (i * 0.005);
+    const seasonality = Math.sin((i / 6) * Math.PI) * 0.1;
+    const predicted = avgValue * trend * (1 + seasonality);
+    const intervalWidth = upperPercentile - lowerPercentile;
+    
+    forecast.push({
+      date: forecastDate.toISOString().split('T')[0],
+      predicted,
+      lower_bound: predicted * (1 - intervalWidth / 2 - i * 0.01),
+      upper_bound: predicted * (1 + intervalWidth / 2 + i * 0.01),
+      is_forecast: true,
+    });
+  }
+
+  // Calculate metrics
+  const mae = test.reduce((sum, point) => sum + Math.abs(point.actual! - point.predicted), 0) / test.length;
+  const rmse = Math.sqrt(test.reduce((sum, point) => sum + Math.pow(point.actual! - point.predicted, 2), 0) / test.length);
+  const mape = test.reduce((sum, point) => sum + Math.abs((point.actual! - point.predicted) / point.actual!) * 100, 0) / test.length;
+  const coverage = test.filter(point => point.actual! >= point.lower_bound && point.actual! <= point.upper_bound).length / test.length * 100;
+
+  return {
+    segment: segment.segment,
+    segmentValue: segment.segmentValue,
+    training_data: training,
+    test_data: test,
+    forecast_data: forecast,
+    metrics: { mae, rmse, mape, coverage },
+  };
+};
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("upload");
@@ -24,6 +105,7 @@ const Index = () => {
   const [segments, setSegments] = useState<SegmentConfig[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [segmentProgress, setSegmentProgress] = useState<any[]>([]);
+  const [forecastResults, setForecastResults] = useState<ForecastResultsType | null>(null);
   
   const [prophetParams, setProphetParams] = useState<ProphetParameters>({
     growth: 'linear',
@@ -38,6 +120,9 @@ const Index = () => {
     cv_period: 180,
     cv_horizon: 365,
     custom_seasonalities: [],
+    interval_width: 0.80,
+    lower_bound: undefined,
+    upper_bound: undefined,
   });
 
   const handleDataLoaded = (data: any[], headers: string[]) => {
@@ -69,6 +154,7 @@ const Index = () => {
     setDateColumn("");
     setSegmentColumn("");
     setDependentVariable("");
+    setForecastResults(null);
   };
 
   // Get unique segment values from the segment column
@@ -92,6 +178,7 @@ const Index = () => {
     }
 
     setIsRunning(true);
+    setForecastResults(null);
     const progress = segments.map(s => ({
       segment: s.segment,
       status: 'pending' as const,
@@ -99,6 +186,8 @@ const Index = () => {
     }));
     setSegmentProgress(progress);
     setActiveTab("progress");
+
+    const allResults: any[] = [];
 
     // Process each segment
     for (let i = 0; i < segments.length; i++) {
@@ -151,6 +240,17 @@ const Index = () => {
         )
       );
 
+      // Generate mock forecast results
+      const mockResults = generateMockForecast(
+        trainingData,
+        testData,
+        segment,
+        dateColumn,
+        dependentVariable,
+        prophetParams
+      );
+      allResults.push(mockResults);
+
       console.log(`Completed forecast for segment: ${segment.segment}`, {
         model: selectedModel,
         segmentValue: segment.segmentValue,
@@ -164,8 +264,17 @@ const Index = () => {
       });
     }
 
+    // Store results
+    const results: ForecastResultsType = {
+      segments: allResults,
+      model: selectedModel,
+      timestamp: new Date().toISOString(),
+    };
+    setForecastResults(results);
+
     setIsRunning(false);
     toast.success(`Successfully completed forecasts for ${segments.length} segments`);
+    setActiveTab("results");
   };
 
   return (
@@ -181,7 +290,7 @@ const Index = () => {
         </header>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7 bg-card">
+          <TabsList className="grid w-full grid-cols-8 bg-card">
             <TabsTrigger value="upload">Upload</TabsTrigger>
             <TabsTrigger value="model" disabled={csvData.length === 0}>Model</TabsTrigger>
             <TabsTrigger value="variables" disabled={csvData.length === 0}>Variables</TabsTrigger>
@@ -189,6 +298,7 @@ const Index = () => {
             <TabsTrigger value="regressors" disabled={segments.length === 0}>Regressors</TabsTrigger>
             <TabsTrigger value="parameters" disabled={segments.length === 0}>Parameters</TabsTrigger>
             <TabsTrigger value="visualize" disabled={segments.length === 0}>Visualize</TabsTrigger>
+            <TabsTrigger value="results" disabled={!forecastResults}>Results</TabsTrigger>
           </TabsList>
 
           <TabsContent value="upload" className="space-y-6">
@@ -315,6 +425,10 @@ const Index = () => {
 
           <TabsContent value="progress" className="space-y-6">
             <ForecastProgress segmentProgress={segmentProgress} />
+          </TabsContent>
+
+          <TabsContent value="results" className="space-y-6">
+            {forecastResults && <ForecastResults results={forecastResults} />}
           </TabsContent>
         </Tabs>
       </div>
