@@ -19,9 +19,26 @@ export interface PACFResult {
 }
 
 export interface DataTransformation {
-  type: 'log' | 'difference' | 'seasonal_difference' | 'box_cox' | 'custom';
-  parameters?: Record<string, any>;
+  type: 'log' | 'difference' | 'seasonal_difference' | 'box_cox' | 'none';
+  variable?: string;
+  parameters?: {
+    seasonal_period?: number;
+    lambda?: number;
+  };
   applied: boolean;
+}
+
+export interface TransformationChain {
+  transformations: DataTransformation[];
+  stationarityBeforeTests: StationarityTestResult[];
+  stationarityAfterTest?: StationarityTestResult;
+}
+
+export interface TransformationInfo {
+  name: string;
+  description: string;
+  useCase: string;
+  example: string;
 }
 
 export interface DataAnalysisResults {

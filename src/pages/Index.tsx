@@ -401,8 +401,11 @@ const Index = () => {
               data={csvData}
               dateColumn={dateColumn}
               valueColumn={dependentVariable}
-              onTransformationApply={(transform) => {
-                toast.success(`Applied ${transform.type} transformation`);
+              regressors={availableRegressors}
+              onTransformationApply={(transformation) => {
+                console.log("Transformation applied:", transformation);
+                const transformCount = transformation.transformations?.length || 1;
+                toast.success(`${transformCount} transformation(s) applied. Data will be transformed during model training.`);
               }}
             />
             <div className="flex justify-end">

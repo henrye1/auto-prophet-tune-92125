@@ -92,3 +92,79 @@ export const calculateMonthsObservable = (
   
   return yearsDiff * 12 + monthsDiff + 1;
 };
+
+/**
+ * Apply a single transformation to data
+ */
+export const applyTransformation = (
+  data: number[],
+  transformation: string,
+  parameters?: any
+): number[] => {
+  switch (transformation) {
+    case 'log':
+      return data.map(val => val > 0 ? Math.log(val) : NaN);
+    case 'difference':
+      return data.slice(1).map((val, i) => val - data[i]);
+    case 'seasonal_difference':
+      const period = parameters?.seasonal_period || 12;
+      return data.slice(period).map((val, i) => val - data[i]);
+    case 'box_cox':
+      const lambda = parameters?.lambda || 0;
+      if (lambda === 0) {
+        return data.map(val => val > 0 ? Math.log(val) : NaN);
+      }
+      return data.map(val => val > 0 ? (Math.pow(val, lambda) - 1) / lambda : NaN);
+    default:
+      return data;
+  }
+};
+
+/**
+ * Apply multiple transformations in sequence
+ */
+export const applyTransformationChain = (
+  data: number[],
+  transformations: any[]
+): number[] => {
+  let transformed = [...data];
+  for (const transform of transformations) {
+    if (transform.type !== 'none') {
+      transformed = applyTransformation(transformed, transform.type, transform.parameters);
+    }
+  }
+  return transformed;
+};
+
+/**
+ * Get transformation information
+ */
+export const getTransformationInfo = (type: string) => {
+  const info: Record<string, any> = {
+    log: {
+      name: "Log Transform",
+      description: "Applies natural logarithm to the data",
+      useCase: "Use when variance increases with the level of the series (heteroskedasticity). Common for exponential growth patterns.",
+      example: "Sales data that doubles each period, stock prices, population growth"
+    },
+    difference: {
+      name: "First Difference",
+      description: "Subtracts previous value from current value",
+      useCase: "Removes linear trends and achieves stationarity. Most common transformation for non-stationary data.",
+      example: "GDP data with upward trend, temperature data with seasonal trend"
+    },
+    seasonal_difference: {
+      name: "Seasonal Difference",
+      description: "Subtracts value from same season in previous cycle",
+      useCase: "Removes seasonal patterns. Use when data shows repeating patterns (e.g., monthly, quarterly).",
+      example: "Retail sales with monthly patterns, energy consumption with weekly cycles"
+    },
+    box_cox: {
+      name: "Box-Cox Transform",
+      description: "Power transformation that automatically finds optimal lambda",
+      useCase: "Stabilizes variance and makes data more normal. More flexible than log transform.",
+      example: "Any data with non-constant variance that needs normalization"
+    }
+  };
+  return info[type] || null;
+};
