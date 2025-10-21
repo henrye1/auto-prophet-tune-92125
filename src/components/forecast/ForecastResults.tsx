@@ -116,33 +116,29 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
               </CardHeader>
               <CardContent>
                 <div className="flex gap-2 mb-4 flex-wrap">
-                  <Badge variant="outline" className="bg-chart-1/10">
-                    <div className="w-3 h-3 rounded-full bg-chart-1 mr-2" />
-                    Training
+                  <Badge variant="outline" className="bg-blue-500/10 border-blue-500/30">
+                    <div className="w-3 h-3 rounded-full bg-blue-600 mr-2" />
+                    Actual Data
                   </Badge>
-                  <Badge variant="outline" className="bg-chart-2/10">
-                    <div className="w-3 h-3 rounded-full bg-chart-2 mr-2" />
-                    Actual (Test)
+                  <Badge variant="outline" className="bg-orange-500/10 border-orange-500/30">
+                    <div className="w-3 h-3 rounded-full bg-orange-600 mr-2" />
+                    Fitted (Test)
                   </Badge>
-                  <Badge variant="outline" className="bg-chart-3/10">
-                    <div className="w-3 h-3 rounded-full bg-chart-3 mr-2" />
-                    Predicted
-                  </Badge>
-                  <Badge variant="outline" className="bg-chart-4/10">
-                    <div className="w-3 h-3 rounded-full bg-chart-4 mr-2" />
+                  <Badge variant="outline" className="bg-purple-500/10 border-purple-500/30">
+                    <div className="w-3 h-3 rounded-full bg-purple-600 mr-2" />
                     Forecast
                   </Badge>
-                  <Badge variant="outline" className="bg-muted">
-                    <div className="w-3 h-3 bg-muted-foreground/30 mr-2" />
-                    Confidence Interval
+                  <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/30">
+                    <div className="w-3 h-3 bg-emerald-600/40 mr-2" />
+                    95% Confidence
                   </Badge>
                 </div>
                 <ResponsiveContainer width="100%" height={400}>
                   <AreaChart data={[...segment.training_data, ...segment.test_data, ...segment.forecast_data]}>
                     <defs>
                       <linearGradient id="confidenceGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.2} />
-                        <stop offset="95%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.05} />
+                        <stop offset="5%" stopColor="rgb(16, 185, 129)" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="rgb(16, 185, 129)" stopOpacity={0.05} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -167,38 +163,42 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                     <Area
                       type="monotone"
                       dataKey="upper_bound"
-                      stroke="none"
+                      stroke="rgb(16, 185, 129)"
+                      strokeWidth={1}
+                      strokeOpacity={0.3}
                       fill="url(#confidenceGradient)"
-                      name="Upper Bound"
+                      name="Upper Bound (95%)"
                     />
                     <Area
                       type="monotone"
                       dataKey="lower_bound"
-                      stroke="none"
+                      stroke="rgb(16, 185, 129)"
+                      strokeWidth={1}
+                      strokeOpacity={0.3}
                       fill="url(#confidenceGradient)"
-                      name="Lower Bound"
+                      name="Lower Bound (95%)"
                     />
                     
-                    {/* Training actual values */}
+                    {/* Actual values (training + test) */}
                     <Line
                       type="monotone"
                       dataKey="actual"
-                      stroke="hsl(var(--chart-1))"
-                      strokeWidth={2}
+                      stroke="rgb(37, 99, 235)"
+                      strokeWidth={2.5}
                       dot={false}
-                      name="Training Data"
+                      name="Actual Data"
                       connectNulls={false}
                     />
                     
-                    {/* Test predictions */}
+                    {/* Test predictions (fitted) */}
                     <Line
                       type="monotone"
                       dataKey={(point: any) => point.is_test ? point.predicted : null}
-                      stroke="hsl(var(--chart-3))"
-                      strokeWidth={2}
+                      stroke="rgb(249, 115, 22)"
+                      strokeWidth={2.5}
                       strokeDasharray="5 5"
-                      dot={{ fill: 'hsl(var(--chart-3))', r: 3 }}
-                      name="Test Predictions"
+                      dot={{ fill: 'rgb(249, 115, 22)', r: 4, strokeWidth: 2, stroke: '#fff' }}
+                      name="Fitted (Test Period)"
                       connectNulls={false}
                     />
                     
@@ -206,10 +206,10 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                     <Line
                       type="monotone"
                       dataKey={(point: any) => point.is_forecast ? point.predicted : null}
-                      stroke="hsl(var(--chart-4))"
-                      strokeWidth={2}
-                      strokeDasharray="3 3"
-                      dot={{ fill: 'hsl(var(--chart-4))', r: 3 }}
+                      stroke="rgb(147, 51, 234)"
+                      strokeWidth={3}
+                      strokeDasharray="8 4"
+                      dot={{ fill: 'rgb(147, 51, 234)', r: 5, strokeWidth: 2, stroke: '#fff' }}
                       name="Forecast"
                       connectNulls={false}
                     />
@@ -218,17 +218,31 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                     {segment.test_data.length > 0 && (
                       <ReferenceLine 
                         x={segment.test_data[0]?.date} 
-                        stroke="hsl(var(--muted-foreground))" 
+                        stroke="rgb(156, 163, 175)" 
+                        strokeWidth={2}
                         strokeDasharray="3 3"
-                        label={{ value: 'Test Start', position: 'top' }}
+                        label={{ 
+                          value: 'Test Start', 
+                          position: 'top',
+                          fill: 'rgb(75, 85, 99)',
+                          fontSize: 12,
+                          fontWeight: 600
+                        }}
                       />
                     )}
                     {segment.forecast_data.length > 0 && (
                       <ReferenceLine 
                         x={segment.forecast_data[0]?.date} 
-                        stroke="hsl(var(--muted-foreground))" 
+                        stroke="rgb(156, 163, 175)" 
+                        strokeWidth={2}
                         strokeDasharray="3 3"
-                        label={{ value: 'Forecast Start', position: 'top' }}
+                        label={{ 
+                          value: 'Forecast Start', 
+                          position: 'top',
+                          fill: 'rgb(75, 85, 99)',
+                          fontSize: 12,
+                          fontWeight: 600
+                        }}
                       />
                     )}
                   </AreaChart>
@@ -248,7 +262,38 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
                     <LineChart data={segment.test_data}>
-...
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis 
+                        dataKey="date" 
+                        className="text-xs"
+                        tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                      />
+                      <YAxis className="text-xs" />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--popover))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '0.5rem',
+                        }}
+                        labelFormatter={(value) => new Date(value).toLocaleDateString()}
+                        formatter={(value: any) => [typeof value === 'number' ? value.toFixed(2) : value, '']}
+                      />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="actual"
+                        stroke="rgb(37, 99, 235)"
+                        strokeWidth={2.5}
+                        name="Actual"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="predicted"
+                        stroke="rgb(249, 115, 22)"
+                        strokeWidth={2.5}
+                        strokeDasharray="5 5"
+                        name="Fitted"
+                      />
                     </LineChart>
                   </ResponsiveContainer>
                 </CardContent>
