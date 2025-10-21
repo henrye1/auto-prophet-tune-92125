@@ -4,17 +4,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ModelSelector } from "@/components/forecast/ModelSelector";
 import { VariableConfig } from "@/components/forecast/VariableConfig";
 import { ProphetHyperparameters } from "@/components/forecast/ProphetHyperparameters";
-import { RegressorConfig } from "@/components/forecast/RegressorConfig";
 import { DataVisualization } from "@/components/forecast/DataVisualization";
+import { DataUpload } from "@/components/forecast/DataUpload";
+import { SegmentMapper } from "@/components/forecast/SegmentMapper";
+import { SegmentRegressorConfig } from "@/components/forecast/SegmentRegressorConfig";
+import { ForecastProgress } from "@/components/forecast/ForecastProgress";
 import { ChevronRight, Play } from "lucide-react";
-import type { ForecastModel, ProphetParameters, Regressor } from "@/types/forecast";
+import { toast } from "sonner";
+import type { ForecastModel, ProphetParameters, SegmentConfig } from "@/types/forecast";
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState("model");
+  const [activeTab, setActiveTab] = useState("upload");
   const [selectedModel, setSelectedModel] = useState<ForecastModel>("prophet");
-  const [dateColumn, setDateColumn] = useState("ds");
-  const [dependentVariable, setDependentVariable] = useState("");
-  const [selectedRegressors, setSelectedRegressors] = useState<Regressor[]>([]);
+  const [dateColumn, setDateColumn] = useState("");
+  const [csvData, setCsvData] = useState<any[]>([]);
+  const [availableColumns, setAvailableColumns] = useState<string[]>([]);
+  const [segments, setSegments] = useState<SegmentConfig[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
+  const [segmentProgress, setSegmentProgress] = useState<any[]>([]);
   
   const [prophetParams, setProphetParams] = useState<ProphetParameters>({
     growth: 'linear',
@@ -28,24 +35,92 @@ const Index = () => {
     cv_horizon: 365,
   });
 
-  // Mock data - in real app, this would come from uploaded files
-  const availableColumns = ["ds", "Y1", "Y", "CP1", "IPC1", "IG1", "YD1", "YD", "EMPL", "VS", "VSR", "CPI", "PPI", "HPI", "REX"];
-  const mockData = Array.from({ length: 50 }, (_, i) => ({
-    date: `2020-${String(Math.floor(i / 4) + 1).padStart(2, '0')}`,
-    Y1: Math.random() * 100 + 50,
-    CPI: Math.random() * 5 + 2,
-    PPI: Math.random() * 4 + 1,
-    REX: Math.random() * 10 + 5,
-  }));
+  const handleDataLoaded = (data: any[], headers: string[]) => {
+    setCsvData(data);
+    setAvailableColumns(headers);
+    if (headers.length > 0 && !dateColumn) {
+      // Auto-detect date column
+      const dateCol = headers.find(h => h.toLowerCase().includes('date') || h.toLowerCase() === 'ds');
+      if (dateCol) setDateColumn(dateCol);
+    }
+    toast.success("Data loaded successfully");
+  };
 
-  const handleRunForecast = () => {
-    console.log("Running forecast with configuration:", {
-      model: selectedModel,
-      dateColumn,
-      dependentVariable,
-      regressors: selectedRegressors,
-      parameters: selectedModel === 'prophet' ? prophetParams : null,
-    });
+  const handleClearData = () => {
+    setCsvData([]);
+    setAvailableColumns([]);
+    setSegments([]);
+    setDateColumn("");
+  };
+
+  const availableRegressors = availableColumns.filter(
+    (col) => col !== dateColumn && !segments.find(s => s.segment === col)
+  );
+
+  const handleRunForecast = async () => {
+    if (segments.length === 0) {
+      toast.error("Please configure at least one segment");
+      return;
+    }
+
+    if (!dateColumn) {
+      toast.error("Please select a date column");
+      return;
+    }
+
+    setIsRunning(true);
+    const progress = segments.map(s => ({
+      segment: s.segment,
+      status: 'pending' as const,
+      progress: 0,
+    }));
+    setSegmentProgress(progress);
+    setActiveTab("progress");
+
+    // Simulate running models for each segment
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      
+      // Update status to running
+      setSegmentProgress(prev => 
+        prev.map((p, idx) => 
+          idx === i ? { ...p, status: 'running', progress: 0, message: 'Preparing data...' } : p
+        )
+      );
+
+      // Simulate model training stages
+      const stages = [
+        { progress: 25, message: 'Training model...' },
+        { progress: 50, message: 'Cross-validation...' },
+        { progress: 75, message: 'Generating forecasts...' },
+        { progress: 100, message: 'Complete' },
+      ];
+
+      for (const stage of stages) {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        setSegmentProgress(prev =>
+          prev.map((p, idx) =>
+            idx === i ? { ...p, progress: stage.progress, message: stage.message } : p
+          )
+        );
+      }
+
+      // Mark as completed
+      setSegmentProgress(prev =>
+        prev.map((p, idx) =>
+          idx === i ? { ...p, status: 'completed', progress: 100 } : p
+        )
+      );
+
+      console.log(`Completed forecast for segment: ${segment.segment}`, {
+        model: selectedModel,
+        config: segment,
+        parameters: selectedModel === 'prophet' ? prophetParams : null,
+      });
+    }
+
+    setIsRunning(false);
+    toast.success(`Successfully completed forecasts for ${segments.length} segments`);
   };
 
   return (
@@ -61,13 +136,31 @@ const Index = () => {
         </header>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 bg-card">
-            <TabsTrigger value="model">Model</TabsTrigger>
-            <TabsTrigger value="variables">Variables</TabsTrigger>
-            <TabsTrigger value="regressors">Regressors</TabsTrigger>
-            <TabsTrigger value="parameters">Parameters</TabsTrigger>
-            <TabsTrigger value="visualize">Visualize</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-7 bg-card">
+            <TabsTrigger value="upload">Upload</TabsTrigger>
+            <TabsTrigger value="model" disabled={csvData.length === 0}>Model</TabsTrigger>
+            <TabsTrigger value="variables" disabled={csvData.length === 0}>Variables</TabsTrigger>
+            <TabsTrigger value="segments" disabled={!dateColumn}>Segments</TabsTrigger>
+            <TabsTrigger value="regressors" disabled={segments.length === 0}>Regressors</TabsTrigger>
+            <TabsTrigger value="parameters" disabled={segments.length === 0}>Parameters</TabsTrigger>
+            <TabsTrigger value="visualize" disabled={segments.length === 0}>Visualize</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="upload" className="space-y-6">
+            <DataUpload
+              onDataLoaded={handleDataLoaded}
+              onClear={handleClearData}
+              hasData={csvData.length > 0}
+            />
+            {csvData.length > 0 && (
+              <div className="flex justify-end">
+                <Button onClick={() => setActiveTab("model")}>
+                  Next: Select Model
+                  <ChevronRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </TabsContent>
 
           <TabsContent value="model" className="space-y-6">
             <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
@@ -82,28 +175,42 @@ const Index = () => {
           <TabsContent value="variables" className="space-y-6">
             <VariableConfig
               dateColumn={dateColumn}
-              dependentVariable={dependentVariable}
+              dependentVariable=""
               availableColumns={availableColumns}
               onDateColumnChange={setDateColumn}
-              onDependentVariableChange={setDependentVariable}
+              onDependentVariableChange={() => {}}
             />
             <div className="flex justify-end">
-              <Button onClick={() => setActiveTab("regressors")}>
-                Next: Regressors
+              <Button onClick={() => setActiveTab("segments")} disabled={!dateColumn}>
+                Next: Configure Segments
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="segments" className="space-y-6">
+            <SegmentMapper
+              availableColumns={availableColumns.filter(c => c !== dateColumn)}
+              segments={segments}
+              onSegmentsChange={setSegments}
+            />
+            <div className="flex justify-end">
+              <Button onClick={() => setActiveTab("regressors")} disabled={segments.length === 0}>
+                Next: Configure Regressors
                 <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
           </TabsContent>
 
           <TabsContent value="regressors" className="space-y-6">
-            <RegressorConfig
-              availableRegressors={availableColumns.filter(c => c !== dateColumn && c !== dependentVariable)}
-              selectedRegressors={selectedRegressors}
-              onRegressorsChange={setSelectedRegressors}
+            <SegmentRegressorConfig
+              segments={segments}
+              availableRegressors={availableRegressors}
+              onSegmentsChange={setSegments}
             />
             <div className="flex justify-end">
               <Button onClick={() => setActiveTab("parameters")}>
-                Next: Parameters
+                Next: Model Parameters
                 <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
@@ -126,19 +233,30 @@ const Index = () => {
                 Visualize Data
                 <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
-              <Button onClick={handleRunForecast} className="bg-gradient-to-r from-primary to-accent">
+              <Button 
+                onClick={handleRunForecast} 
+                className="bg-gradient-to-r from-primary to-accent"
+                disabled={isRunning || segments.length === 0}
+              >
                 <Play className="mr-2 h-4 w-4" />
-                Run Forecast
+                Run Forecast for {segments.length} Segment{segments.length !== 1 ? 's' : ''}
               </Button>
             </div>
           </TabsContent>
 
           <TabsContent value="visualize" className="space-y-6">
             <DataVisualization
-              data={mockData}
-              dependentVariable={dependentVariable || 'Y1'}
-              regressors={selectedRegressors.map(r => r.name)}
+              data={csvData.slice(0, 100).map((row, idx) => ({
+                date: row[dateColumn] || `Row ${idx + 1}`,
+                ...row,
+              }))}
+              dependentVariable={segments[0]?.segment || ''}
+              regressors={availableRegressors.slice(0, 5)}
             />
+          </TabsContent>
+
+          <TabsContent value="progress" className="space-y-6">
+            <ForecastProgress segmentProgress={segmentProgress} />
           </TabsContent>
         </Tabs>
       </div>
