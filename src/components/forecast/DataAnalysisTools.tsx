@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Bar, BarChart } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Bar, BarChart, Legend } from "recharts";
 import { Activity, TrendingUp, Wand2, AlertCircle, CheckCircle2, Info, Plus, X, BarChart3 } from "lucide-react";
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -303,8 +303,16 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
             {/* Time Series Visualization */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Time Series: {stationarityVariable === "dependent" ? valueColumn : stationarityVariable}</CardTitle>
-                <CardDescription>Visual inspection is the foundation of good modeling - always look at your data first</CardDescription>
+                <CardTitle className="text-sm flex items-center justify-between">
+                  <span>Time Series Plot</span>
+                  <Badge variant="secondary" className="font-mono text-xs">
+                    {stationarityVariable === "dependent" ? valueColumn : stationarityVariable}
+                  </Badge>
+                </CardTitle>
+                <CardDescription>
+                  Visual inspection is the foundation of good modeling - always look at your data first. 
+                  Showing original, untransformed data.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={250}>
@@ -316,18 +324,30 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                       angle={-45}
                       textAnchor="end"
                       height={60}
+                      label={{ value: 'Date', position: 'insideBottom', offset: -5 }}
                     />
-                    <YAxis tick={{ fontSize: 12 }} />
+                    <YAxis 
+                      tick={{ fontSize: 12 }}
+                      label={{ value: 'Value', angle: -90, position: 'insideLeft' }}
+                    />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: 'hsl(var(--popover))',
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '0.5rem',
                       }}
+                      labelFormatter={(value) => `Date: ${value}`}
+                      formatter={(value: any) => [value.toFixed(2), stationarityVariable === "dependent" ? valueColumn : stationarityVariable]}
+                    />
+                    <Legend 
+                      payload={[
+                        { value: stationarityVariable === "dependent" ? valueColumn : stationarityVariable, type: 'line', color: 'hsl(var(--primary))' }
+                      ]}
                     />
                     <Line 
                       type="monotone" 
                       dataKey="value" 
+                      name={stationarityVariable === "dependent" ? valueColumn : stationarityVariable}
                       stroke="hsl(var(--primary))" 
                       strokeWidth={2}
                       dot={false}
@@ -588,55 +608,138 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
             {/* Current Variable Visualization - Before/During Transformation */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">
-                  {currentVariable === 'dependent' ? 'Dependent Variable' : 'Regressor'}: {getVariableDisplayName(currentVariable)}
+                <CardTitle className="text-sm flex items-center justify-between">
+                  <span>
+                    {currentVariable === 'dependent' ? 'Dependent Variable' : 'Regressor'}: {getVariableDisplayName(currentVariable)}
+                  </span>
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {currentTransformations.length === 0 ? 'Original' : `${currentTransformations.length} Transform(s)`}
+                  </Badge>
                 </CardTitle>
                 <CardDescription>
                   {currentTransformations.length === 0 
-                    ? 'Original data - apply transformations to achieve stationarity'
-                    : `After ${currentTransformations.length} transformation(s)`}
+                    ? 'Original, untransformed data - apply transformations to achieve stationarity'
+                    : `Data after ${currentTransformations.length} transformation(s) applied in sequence`}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {currentTransformations.length === 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={getTimeSeriesData(currentVariable)}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'hsl(var(--popover))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '0.5rem',
-                        }}
-                      />
-                      <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <div>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={getTimeSeriesData(currentVariable)}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis 
+                          dataKey="date" 
+                          tick={{ fontSize: 10 }} 
+                          angle={-45} 
+                          textAnchor="end" 
+                          height={60}
+                          label={{ value: 'Date', position: 'insideBottom', offset: -5 }}
+                        />
+                        <YAxis 
+                          tick={{ fontSize: 10 }}
+                          label={{ value: 'Original Value', angle: -90, position: 'insideLeft' }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--popover))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '0.5rem',
+                          }}
+                          labelFormatter={(value) => `Date: ${value}`}
+                          formatter={(value: any) => [value.toFixed(2), getVariableDisplayName(currentVariable)]}
+                        />
+                        <Legend 
+                          payload={[
+                            { value: `${getVariableDisplayName(currentVariable)} (Original)`, type: 'line', color: 'hsl(var(--primary))' }
+                          ]}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="value" 
+                          name={getVariableDisplayName(currentVariable)}
+                          stroke="hsl(var(--primary))" 
+                          strokeWidth={2} 
+                          dot={false} 
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 ) : (
                   <div className="space-y-3">
                     <div>
-                      <h5 className="text-xs font-semibold mb-2 text-muted-foreground">Before Transformation</h5>
+                      <div className="flex items-center justify-between mb-2">
+                        <h5 className="text-xs font-semibold text-muted-foreground">Before Transformation</h5>
+                        <Badge variant="outline" className="text-xs">Original Data</Badge>
+                      </div>
                       <ResponsiveContainer width="100%" height={150}>
                         <LineChart data={beforeTransformData}>
                           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                          <XAxis dataKey="date" tick={{ fontSize: 9 }} />
-                          <YAxis tick={{ fontSize: 9 }} />
-                          <Tooltip />
-                          <Line type="monotone" dataKey="value" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
+                          <XAxis 
+                            dataKey="date" 
+                            tick={{ fontSize: 9 }}
+                            label={{ value: 'Date', position: 'insideBottom', offset: -5, fontSize: 10 }}
+                          />
+                          <YAxis 
+                            tick={{ fontSize: 9 }}
+                            label={{ value: 'Value', angle: -90, position: 'insideLeft', fontSize: 10 }}
+                          />
+                          <Tooltip
+                            labelFormatter={(value) => `Date: ${value}`}
+                            formatter={(value: any) => [value.toFixed(2), 'Original']}
+                          />
+                          <Legend 
+                            payload={[
+                              { value: `${getVariableDisplayName(currentVariable)} (Before)`, type: 'line', color: 'hsl(var(--destructive))' }
+                            ]}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="value" 
+                            name="Original"
+                            stroke="hsl(var(--destructive))" 
+                            strokeWidth={2} 
+                            dot={false} 
+                          />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
                     <div>
-                      <h5 className="text-xs font-semibold mb-2 text-muted-foreground">After Transformation(s)</h5>
+                      <div className="flex items-center justify-between mb-2">
+                        <h5 className="text-xs font-semibold text-muted-foreground">After Transformation(s)</h5>
+                        <Badge variant="default" className="text-xs">
+                          {currentTransformations.map((t: any) => getTransformationInfo(t.type)?.name.split(' ')[0]).join(' + ')}
+                        </Badge>
+                      </div>
                       <ResponsiveContainer width="100%" height={150}>
                         <LineChart data={afterTransformData}>
                           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                          <XAxis dataKey="date" tick={{ fontSize: 9 }} />
-                          <YAxis tick={{ fontSize: 9 }} />
-                          <Tooltip />
-                          <Line type="monotone" dataKey="value" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
+                          <XAxis 
+                            dataKey="date" 
+                            tick={{ fontSize: 9 }}
+                            label={{ value: 'Date', position: 'insideBottom', offset: -5, fontSize: 10 }}
+                          />
+                          <YAxis 
+                            tick={{ fontSize: 9 }}
+                            label={{ value: 'Transformed Value', angle: -90, position: 'insideLeft', fontSize: 10 }}
+                          />
+                          <Tooltip
+                            labelFormatter={(value) => `Date: ${value}`}
+                            formatter={(value: any) => [value.toFixed(2), 'Transformed']}
+                          />
+                          <Legend 
+                            payload={[
+                              { value: `${getVariableDisplayName(currentVariable)} (Transformed)`, type: 'line', color: 'hsl(var(--chart-1))' }
+                            ]}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="value" 
+                            name="Transformed"
+                            stroke="hsl(var(--chart-1))" 
+                            strokeWidth={2} 
+                            dot={false} 
+                          />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
@@ -759,16 +862,54 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
             {Object.keys(savedTransformations).length > 1 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-sm">Multi-Variable Comparison</CardTitle>
-                  <CardDescription>Visual comparison of transformed variables</CardDescription>
+                  <CardTitle className="text-sm">Multi-Variable Comparison (After Transformations)</CardTitle>
+                  <CardDescription>
+                    Compare all transformed variables side-by-side. Each line represents a different variable after its saved transformations have been applied.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart>
+                <CardContent className="space-y-4">
+                  {/* Show which transformations were applied to each */}
+                  <div className="grid gap-2 text-xs">
+                    {Object.entries(savedTransformations).map(([variable, transforms]) => (
+                      <div key={variable} className="flex items-center gap-2 p-2 bg-muted/50 rounded">
+                        <Badge variant="outline" className="shrink-0">
+                          {getVariableDisplayName(variable)}
+                        </Badge>
+                        <span className="text-muted-foreground">
+                          {transforms.map((t: any) => getTransformationInfo(t.type)?.name).join(' → ')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <ResponsiveContainer width="100%" height={350}>
+                    <LineChart data={getTimeSeriesData('dependent')}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
+                      <XAxis 
+                        dataKey="date" 
+                        tick={{ fontSize: 10 }} 
+                        angle={-45}
+                        textAnchor="end"
+                        height={70}
+                        label={{ value: 'Date', position: 'insideBottom', offset: -10 }}
+                      />
+                      <YAxis 
+                        tick={{ fontSize: 10 }}
+                        label={{ value: 'Transformed Values', angle: -90, position: 'insideLeft' }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--popover))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '0.5rem',
+                        }}
+                      />
+                      <Legend 
+                        verticalAlign="top" 
+                        height={36}
+                        iconType="line"
+                        wrapperStyle={{ paddingBottom: '10px' }}
+                      />
                       {Object.keys(savedTransformations).map((variable, index) => {
                         const varData = getTimeSeriesData(variable);
                         const colors = ['hsl(var(--primary))', 'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))'];
@@ -780,13 +921,17 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
                             dataKey="value" 
                             name={getVariableDisplayName(variable)}
                             stroke={colors[index % colors.length]} 
-                            strokeWidth={1.5}
+                            strokeWidth={2}
                             dot={false}
                           />
                         );
                       })}
                     </LineChart>
                   </ResponsiveContainer>
+                  
+                  <p className="text-xs text-muted-foreground">
+                    Note: This shows the original data for comparison. In the actual model, the saved transformations will be applied to each variable.
+                  </p>
                 </CardContent>
               </Card>
             )}
