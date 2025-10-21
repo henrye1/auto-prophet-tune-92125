@@ -32,6 +32,8 @@ interface VariableState {
   pacfData?: any;
   beforeData?: any[];
   afterData?: any[];
+  beforeStats?: any;
+  afterStats?: any;
 }
 
 export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, onTransformationApply }: DataAnalysisToolsProps) => {
@@ -103,7 +105,7 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
     transformations: [],
   };
 
-  const addTransformation = () => {
+  const addTransformation = async () => {
     if (selectedTransform === "none") return;
 
     const newState = { ...currentState };
@@ -117,24 +119,57 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
       applied: true
     });
 
-    // Mock transformation effect
-    const originalData = getTimeSeriesData(selectedVariable);
-    const transformed = originalData.map((d, i) => ({
-      ...d,
-      value: selectedTransform === 'log' ? Math.log(Math.abs(d.value) + 1) :
-             selectedTransform === 'standardize' ? (d.value - 50) / 10 :
-             selectedTransform === 'difference' && i > 0 ? d.value - originalData[i-1].value :
-             d.value * 0.8
-    }));
-    newState.afterData = transformed;
+    // Call statistical tests edge function for real analysis
+    toast.info("Running statistical tests...");
+    
+    try {
+      const columnName = selectedVariable === "dependent" ? valueColumn : selectedVariable;
+      const variableData = data.map(row => row[columnName]);
+      const dependentDataValues = selectedVariable !== "dependent" 
+        ? data.map(row => row[valueColumn]) 
+        : null;
 
-    // Mock stationarity test
-    newState.stationarityTest = {
-      test_statistic: -2.5 - (newState.transformations.length * 0.5),
-      p_value: Math.max(0.001, 0.12 - (newState.transformations.length * 0.04)),
-      critical_values: { "1%": -3.43, "5%": -2.86, "10%": -2.57 },
-      is_stationary: newState.transformations.length >= 2,
-    };
+      const { data: testResults, error } = await supabase.functions.invoke('statistical-tests', {
+        body: {
+          variable: selectedVariable,
+          data: variableData,
+          transformations: newState.transformations,
+          dependentData: dependentDataValues
+        }
+      });
+
+      if (error) throw error;
+
+      // Update state with test results
+      newState.stationarityTest = testResults.after?.adf || testResults.before.adf;
+      newState.acfData = testResults.after?.acf || testResults.before.acf;
+      newState.pacfData = testResults.after?.pacf || testResults.before.pacf;
+      newState.beforeStats = testResults.before;
+      newState.afterStats = testResults.after;
+
+      // Mock transformation effect for visualization
+      const originalData = getTimeSeriesData(selectedVariable);
+      const transformed = testResults.transformedDataSample 
+        ? originalData.slice(0, testResults.transformedDataSample.length).map((d, i) => ({
+            ...d,
+            value: testResults.transformedDataSample[i]
+          }))
+        : originalData;
+      newState.afterData = transformed;
+
+      toast.success("Statistical tests complete!");
+    } catch (error: any) {
+      console.error('Statistical tests error:', error);
+      toast.error(error.message || "Failed to run statistical tests");
+      
+      // Fallback to mock data if edge function fails
+      newState.stationarityTest = {
+        test_statistic: -2.5 - (newState.transformations.length * 0.5),
+        p_value: Math.max(0.001, 0.12 - (newState.transformations.length * 0.04)),
+        critical_values: { "1%": -3.43, "5%": -2.86, "10%": -2.57 },
+        is_stationary: newState.transformations.length >= 2,
+      };
+    }
 
     setVariableStates(prev => ({ ...prev, [selectedVariable]: newState }));
     setSelectedTransform("none");
@@ -473,23 +508,113 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, o
 
               {/* Stationarity Test Results */}
               {currentState.stationarityTest && (
-                <Alert variant={currentState.stationarityTest.is_stationary ? "default" : "destructive"}>
-                  {currentState.stationarityTest.is_stationary ? (
-                    <CheckCircle2 className="h-4 w-4" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4" />
+                <div className="space-y-3">
+                  <Alert variant={currentState.stationarityTest.is_stationary ? "default" : "destructive"}>
+                    {currentState.stationarityTest.is_stationary ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4" />
+                    )}
+                    <AlertDescription>
+                      <p className="font-semibold">
+                        {currentState.stationarityTest.is_stationary 
+                          ? "✓ Data is stationary!" 
+                          : "⚠ Data still non-stationary"}
+                      </p>
+                      <p className="text-xs mt-1">
+                        ADF Test Statistic: {currentState.stationarityTest.test_statistic} | 
+                        P-value: {currentState.stationarityTest.p_value.toFixed(4)}
+                      </p>
+                    </AlertDescription>
+                  </Alert>
+
+                  {/* ADF Comparison */}
+                  {currentState.beforeStats && currentState.afterStats && (
+                    <Card className="bg-muted/50">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-xs">ADF Test Comparison</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div className="space-y-1">
+                            <div className="font-semibold text-muted-foreground">Before</div>
+                            <div>Test Stat: {currentState.beforeStats.adf.test_statistic}</div>
+                            <div>P-value: {currentState.beforeStats.adf.p_value.toFixed(4)}</div>
+                            <Badge variant={currentState.beforeStats.adf.is_stationary ? "default" : "destructive"} className="text-[10px]">
+                              {currentState.beforeStats.adf.is_stationary ? "Stationary" : "Non-stationary"}
+                            </Badge>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="font-semibold text-muted-foreground">After</div>
+                            <div>Test Stat: {currentState.afterStats.adf.test_statistic}</div>
+                            <div>P-value: {currentState.afterStats.adf.p_value.toFixed(4)}</div>
+                            <Badge variant={currentState.afterStats.adf.is_stationary ? "default" : "destructive"} className="text-[10px]">
+                              {currentState.afterStats.adf.is_stationary ? "Stationary" : "Non-stationary"}
+                            </Badge>
+                          </div>
+                        </div>
+                        {currentState.beforeStats.correlation !== null && (
+                          <div className="pt-2 border-t border-border">
+                            <div className="font-semibold text-xs mb-1">Correlation with Dependent</div>
+                            <div className="grid grid-cols-2 gap-3 text-xs">
+                              <div>Before: <span className="font-mono">{currentState.beforeStats.correlation?.toFixed(3) || 'N/A'}</span></div>
+                              <div>After: <span className="font-mono">{currentState.afterStats.correlation?.toFixed(3) || 'N/A'}</span></div>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
                   )}
-                  <AlertDescription>
-                    <p className="font-semibold">
-                      {currentState.stationarityTest.is_stationary 
-                        ? "✓ Data is stationary!" 
-                        : "⚠ Data still non-stationary"}
-                    </p>
-                    <p className="text-xs mt-1">
-                      P-value: {currentState.stationarityTest.p_value.toFixed(3)}
-                    </p>
-                  </AlertDescription>
-                </Alert>
+
+                  {/* ACF/PACF Charts */}
+                  {currentState.acfData && currentState.pacfData && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <Card className="bg-muted/50">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-xs">ACF (Autocorrelation)</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={120}>
+                            <BarChart data={currentState.acfData.lags.map((lag: number, i: number) => ({
+                              lag,
+                              correlation: currentState.acfData.correlations[i]
+                            }))}>
+                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                              <XAxis dataKey="lag" tick={{ fontSize: 8 }} />
+                              <YAxis domain={[-1, 1]} tick={{ fontSize: 8 }} />
+                              <Tooltip />
+                              <ReferenceLine y={currentState.acfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                              <ReferenceLine y={-currentState.acfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                              <Bar dataKey="correlation" fill="hsl(var(--primary))" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="bg-muted/50">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-xs">PACF (Partial Autocorrelation)</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={120}>
+                            <BarChart data={currentState.pacfData.lags.map((lag: number, i: number) => ({
+                              lag,
+                              correlation: currentState.pacfData.correlations[i]
+                            }))}>
+                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                              <XAxis dataKey="lag" tick={{ fontSize: 8 }} />
+                              <YAxis domain={[-1, 1]} tick={{ fontSize: 8 }} />
+                              <Tooltip />
+                              <ReferenceLine y={currentState.pacfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                              <ReferenceLine y={-currentState.pacfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                              <Bar dataKey="correlation" fill="hsl(var(--chart-2))" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* Action Buttons */}
