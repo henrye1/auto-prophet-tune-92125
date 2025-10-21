@@ -31,10 +31,13 @@ const Index = () => {
     seasonality_mode: 'additive',
     seasonality_prior_scale: 10,
     yearly_seasonality: true,
+    weekly_seasonality: false,
+    daily_seasonality: false,
     changepoint_range: 0.8,
     cv_initial: 730,
     cv_period: 180,
     cv_horizon: 365,
+    custom_seasonalities: [],
   });
 
   const handleDataLoaded = (data: any[], headers: string[]) => {

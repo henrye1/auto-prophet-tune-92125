@@ -5,11 +5,22 @@ export interface ProphetParameters {
   changepoint_prior_scale: number;
   seasonality_mode: 'additive' | 'multiplicative';
   seasonality_prior_scale: number;
-  yearly_seasonality: boolean | 'auto';
+  yearly_seasonality: boolean | number;
+  weekly_seasonality: boolean | number;
+  daily_seasonality: boolean | number;
   changepoint_range: number;
   cv_initial: number;
   cv_period: number;
   cv_horizon: number;
+  custom_seasonalities?: CustomSeasonality[];
+}
+
+export interface CustomSeasonality {
+  name: string;
+  period: number;
+  fourier_order: number;
+  prior_scale?: number;
+  mode?: 'additive' | 'multiplicative';
 }
 
 export interface AutogluonParameters {
