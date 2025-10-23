@@ -8,6 +8,7 @@ import { DataVisualization } from "@/components/forecast/DataVisualization";
 import { DataUpload } from "@/components/forecast/DataUpload";
 import { SegmentMapper } from "@/components/forecast/SegmentMapper";
 import { SegmentRegressorConfig } from "@/components/forecast/SegmentRegressorConfig";
+import { SegmentContextSelector } from "@/components/forecast/SegmentContextSelector";
 import { ForecastProgress } from "@/components/forecast/ForecastProgress";
 import { ForecastResults } from "@/components/forecast/ForecastResults";
 import { PerformanceMetricSelector } from "@/components/forecast/PerformanceMetricSelector";
@@ -152,8 +153,9 @@ const Index = () => {
   const [segmentProgress, setSegmentProgress] = useState<any[]>([]);
   const [forecastResults, setForecastResults] = useState<ForecastResultsType | null>(null);
   const [selectedMetrics, setSelectedMetrics] = useState<PerformanceMetric[]>(['mae', 'rmse', 'mape', 'coverage']);
+  const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
   
-  const [prophetParams, setProphetParams] = useState<ProphetParameters>({
+  const [prophetParams] = useState<ProphetParameters>({
     growth: 'linear',
     changepoint_prior_scale: 0.05,
     seasonality_mode: 'additive',
@@ -287,13 +289,14 @@ const Index = () => {
       );
 
       // Generate mock forecast results
+      const segmentProphetParams = segment.prophet_params || prophetParams;
       const mockResults = generateMockForecast(
         trainingData,
         testData,
         segment,
         dateColumn,
         dependentVariable,
-        prophetParams,
+        segmentProphetParams,
         selectedMetrics
       );
       allResults.push(mockResults);
@@ -307,7 +310,7 @@ const Index = () => {
         forecastPeriods: segment.forecast_periods,
         frequency: segment.frequency,
         config: segment,
-        parameters: selectedModel === 'prophet' ? prophetParams : null,
+        parameters: selectedModel === 'prophet' ? segmentProphetParams : null,
       });
     }
 
@@ -397,17 +400,29 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="analysis" className="space-y-6">
-            <DataAnalysisTools
-              data={csvData}
-              dateColumn={dateColumn}
-              valueColumn={dependentVariable}
-              regressors={availableRegressors}
-              onTransformationApply={(transformation) => {
-                console.log("Transformation applied:", transformation);
-                const transformCount = transformation.transformations?.length || 1;
-                toast.success(`${transformCount} transformation(s) applied. Data will be transformed during model training.`);
-              }}
+            <SegmentContextSelector
+              segments={segments}
+              selectedSegment={selectedSegment}
+              onSegmentSelect={setSelectedSegment}
             />
+            {selectedSegment ? (
+              <DataAnalysisTools
+                data={csvData.filter(row => row[segmentColumn] === segments.find(s => s.segment === selectedSegment)?.segmentValue)}
+                dateColumn={dateColumn}
+                valueColumn={dependentVariable}
+                regressors={availableRegressors}
+                segmentName={selectedSegment}
+                onTransformationApply={(transformation) => {
+                  console.log("Transformation applied:", transformation);
+                  const transformCount = transformation.transformations?.length || 1;
+                  toast.success(`${transformCount} transformation(s) applied. Data will be transformed during model training.`);
+                }}
+              />
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                Please select a segment from the context selector above to analyze data
+              </div>
+            )}
             <div className="flex justify-end">
               <Button onClick={() => setActiveTab("segments")}>
                 Next: Configure Segments
@@ -461,11 +476,28 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="parameters" className="space-y-6">
-            {selectedModel === 'prophet' && (
+            <SegmentContextSelector
+              segments={segments}
+              selectedSegment={selectedSegment}
+              onSegmentSelect={setSelectedSegment}
+            />
+            {selectedModel === 'prophet' && selectedSegment && (
               <ProphetHyperparameters
-                parameters={prophetParams}
-                onParametersChange={setProphetParams}
+                segment={segments.find(s => s.segment === selectedSegment)!}
+                onParametersChange={(params) => {
+                  setSegments(segments.map(s => 
+                    s.segment === selectedSegment ? { ...s, prophet_params: params } : s
+                  ));
+                }}
+                csvData={csvData.filter(row => row[segmentColumn] === segments.find(s => s.segment === selectedSegment)?.segmentValue)}
+                dateColumn={dateColumn}
+                valueColumn={dependentVariable}
               />
+            )}
+            {selectedModel === 'prophet' && !selectedSegment && (
+              <div className="text-center py-12 text-muted-foreground">
+                Please select a segment from the context selector above to configure parameters
+              </div>
             )}
             {selectedModel === 'autogluon' && (
               <div className="text-center py-12 text-muted-foreground">

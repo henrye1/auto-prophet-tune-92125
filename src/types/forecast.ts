@@ -64,6 +64,9 @@ export interface SegmentConfig {
   total_records: number;
   training_records: number;
   test_records: number; // Number of recent records to exclude for testing
+  prophet_params?: ProphetParameters; // Segment-specific Prophet parameters
+  autogluon_params?: AutogluonParameters; // Segment-specific AutoGluon parameters
+  traditional_params?: TraditionalTSParameters; // Segment-specific traditional parameters
 }
 
 export interface ForecastConfig {

@@ -18,6 +18,7 @@ interface DataAnalysisToolsProps {
   dateColumn: string;
   valueColumn: string;
   regressors?: string[];
+  segmentName?: string;
   onTransformationApply: (transformation: any) => void;
 }
 
@@ -37,7 +38,7 @@ interface VariableState {
   featureImportance?: number;
 }
 
-export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, onTransformationApply }: DataAnalysisToolsProps) => {
+export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, segmentName, onTransformationApply }: DataAnalysisToolsProps) => {
   const [selectedVariable, setSelectedVariable] = useState<string>("dependent");
   const [variableStates, setVariableStates] = useState<Record<string, VariableState>>({});
   const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
