@@ -16,11 +16,9 @@ export const DataUpload = ({ onDataLoaded, onClear, hasData }: DataUploadProps) 
   const [fileName, setFileName] = useState<string>("");
   const [rowCount, setRowCount] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
-  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  const processFile = useCallback((file: File) => {
     if (!file.name.endsWith('.csv')) {
       toast.error("Please upload a CSV file");
       return;
@@ -60,10 +58,39 @@ export const DataUpload = ({ onDataLoaded, onClear, hasData }: DataUploadProps) 
         setIsProcessing(false);
       },
     });
+  }, [onDataLoaded]);
 
+  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    processFile(file);
     // Reset the input
     event.target.value = '';
-  }, [onDataLoaded]);
+  }, [processFile]);
+
+  const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  }, [processFile]);
 
   const handleClear = () => {
     setFileName("");
@@ -83,8 +110,19 @@ export const DataUpload = ({ onDataLoaded, onClear, hasData }: DataUploadProps) 
       </CardHeader>
       <CardContent className="space-y-4">
         {!hasData ? (
-          <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
-            <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <div 
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+              isDragging 
+                ? 'border-primary bg-primary/5 scale-[1.02]' 
+                : 'border-border hover:border-primary/50'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <Upload className={`h-12 w-12 mx-auto mb-4 transition-colors ${
+              isDragging ? 'text-primary' : 'text-muted-foreground'
+            }`} />
             <Label htmlFor="csv-upload" className="cursor-pointer">
               <div className="text-sm mb-2">
                 <span className="text-primary font-semibold">Click to upload</span> or drag and drop
