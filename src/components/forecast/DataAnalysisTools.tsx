@@ -19,7 +19,10 @@ interface DataAnalysisToolsProps {
   valueColumn: string;
   regressors?: string[];
   segmentName?: string;
+  segmentValue?: string;
+  initialVariableStates?: Record<string, VariableState>;
   onTransformationApply: (transformation: any) => void;
+  onVariableStatesChange?: (segmentValue: string, states: Record<string, VariableState>) => void;
 }
 
 type VariableStatus = 'pending' | 'analyzing' | 'transformed' | 'archived';
@@ -38,11 +41,29 @@ interface VariableState {
   featureImportance?: number;
 }
 
-export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, segmentName, onTransformationApply }: DataAnalysisToolsProps) => {
+export const DataAnalysisTools = ({ 
+  data, 
+  dateColumn, 
+  valueColumn, 
+  regressors, 
+  segmentName, 
+  segmentValue,
+  initialVariableStates = {},
+  onTransformationApply,
+  onVariableStatesChange
+}: DataAnalysisToolsProps) => {
   const [selectedVariable, setSelectedVariable] = useState<string>("dependent");
-  const [variableStates, setVariableStates] = useState<Record<string, VariableState>>({});
+  const [variableStates, setVariableStates] = useState<Record<string, VariableState>>(initialVariableStates);
   const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
   const [selectedTransform, setSelectedTransform] = useState<string>("none");
+
+  // Persist state changes back to parent
+  const updateVariableStates = (newStates: Record<string, VariableState>) => {
+    setVariableStates(newStates);
+    if (onVariableStatesChange && segmentValue) {
+      onVariableStatesChange(segmentValue, newStates);
+    }
+  };
 
   // Handle datasets with or without regressors
   const hasRegressors = regressors && regressors.length > 0;
@@ -173,7 +194,7 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, s
         newStates[varKey] = state;
       });
 
-      setVariableStates(newStates);
+      updateVariableStates(newStates);
       
       const completedCount = Object.values(newStates).filter(s => s.status === 'transformed').length;
       toast.success(`✅ Analysis complete! ${completedCount}/${result.analyses.length} variables processed with full statistical analysis.`);
@@ -263,7 +284,7 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, s
       };
     }
 
-    setVariableStates(prev => ({ ...prev, [selectedVariable]: newState }));
+    updateVariableStates({ ...variableStates, [selectedVariable]: newState });
     setSelectedTransform("none");
   };
 
@@ -275,18 +296,18 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, s
       newState.afterData = undefined;
       newState.stationarityTest = undefined;
     }
-    setVariableStates(prev => ({ ...prev, [selectedVariable]: newState }));
+    updateVariableStates({ ...variableStates, [selectedVariable]: newState });
   };
 
   const saveTransformations = () => {
     const newState = { ...currentState, status: 'transformed' as VariableStatus };
-    setVariableStates(prev => ({ ...prev, [selectedVariable]: newState }));
+    updateVariableStates({ ...variableStates, [selectedVariable]: newState });
     toast.success(`Transformations saved for ${getVariableDisplayName(selectedVariable)}`);
   };
 
   const archiveVariable = () => {
     const newState = { ...currentState, status: 'archived' as VariableStatus };
-    setVariableStates(prev => ({ ...prev, [selectedVariable]: newState }));
+    updateVariableStates({ ...variableStates, [selectedVariable]: newState });
     toast.info(`${getVariableDisplayName(selectedVariable)} archived`);
   };
 

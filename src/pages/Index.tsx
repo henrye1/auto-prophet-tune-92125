@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ModelSelector } from "@/components/forecast/ModelSelector";
 import { VariableConfig } from "@/components/forecast/VariableConfig";
 import { ProphetHyperparameters } from "@/components/forecast/ProphetHyperparameters";
@@ -17,7 +19,7 @@ import { PerformanceMetricSelector } from "@/components/forecast/PerformanceMetr
 import { DataAnalysisTools } from "@/components/forecast/DataAnalysisTools";
 import { SaveModelDialog } from "@/components/forecast/SaveModelDialog";
 
-import { ChevronRight, Play, Save, LogOut, Library } from "lucide-react";
+import { ChevronRight, Play, Save, LogOut, Library, Wand2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { ForecastModel, ProphetParameters, SegmentConfig, PerformanceMetric, ForecastConfig } from "@/types/forecast";
 import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
@@ -164,7 +166,8 @@ const Index = () => {
   const [currentModelId, setCurrentModelId] = useState<string | undefined>(undefined);
   const [currentModelName, setCurrentModelName] = useState<string | undefined>(undefined);
   const [selectedAnalysisSegment, setSelectedAnalysisSegment] = useState<string | null>(null);
-  const [segmentAnalysisStates, setSegmentAnalysisStates] = useState<Record<string, any>>({});
+  const [segmentAnalysisStates, setSegmentAnalysisStates] = useState<Record<string, Record<string, any>>>({});
+  const [isAnalyzingAllSegments, setIsAnalyzingAllSegments] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
@@ -244,6 +247,149 @@ const Index = () => {
     
     setSegments(loadedSegments);
     toast.success(`Model "${model.model_name}" loaded successfully`);
+  };
+
+  // Run analysis on all segments simultaneously
+  const handleRunAllSegmentsAnalysis = async () => {
+    setIsAnalyzingAllSegments(true);
+    toast.info(`Starting AI analysis for ${segments.length} segments...`);
+
+    try {
+      // Run analysis for each segment in parallel
+      const analysisPromises = segments.map(async (segment) => {
+        const segmentData = csvData.filter(row => row[segmentColumn] === segment.segmentValue);
+        
+        if (segmentData.length < 10) {
+          return { segmentValue: segment.segmentValue, error: 'Insufficient data' };
+        }
+
+        const variables = [
+          { name: dependentVariable, type: 'dependent' },
+          ...availableRegressors.map(r => ({ name: r, type: 'regressor' }))
+        ];
+
+        try {
+          const { data: result, error } = await supabase.functions.invoke('analyze-transformations', {
+            body: {
+              variables,
+              sampleData: segmentData.slice(0, 100)
+            }
+          });
+
+          if (error) throw error;
+
+          // Process results similar to DataAnalysisTools
+          const newStates: Record<string, any> = {};
+          const dependentDataValues = segmentData.map(row => row[dependentVariable]);
+
+          const testPromises = result.analyses.map(async (analysis: any) => {
+            const varKey = analysis.type === 'dependent' ? 'dependent' : analysis.variable;
+            const columnName = varKey === "dependent" ? dependentVariable : varKey;
+            const variableData = segmentData.map(row => row[columnName]);
+
+            const transformations = analysis.recommendations.map((rec: any) => ({
+              type: rec.transform,
+              variable: varKey,
+              applied: true
+            }));
+
+            try {
+              const { data: testResults, error: testError } = await supabase.functions.invoke('statistical-tests', {
+                body: {
+                  variable: varKey,
+                  data: variableData,
+                  transformations: transformations,
+                  dependentData: varKey !== "dependent" ? dependentDataValues : null
+                }
+              });
+
+              if (testError) throw testError;
+
+              return {
+                varKey,
+                state: {
+                  status: 'transformed',
+                  transformations: transformations,
+                  aiRecommendations: analysis,
+                  stationarityTest: testResults.after?.adf || testResults.before.adf,
+                  acfData: testResults.after?.acf || testResults.before.acf,
+                  pacfData: testResults.after?.pacf || testResults.before.pacf,
+                  beforeStats: testResults.before,
+                  afterStats: testResults.after,
+                  featureImportance: testResults.featureImportance
+                }
+              };
+            } catch (err) {
+              console.error(`Error processing ${varKey} for segment ${segment.segment}:`, err);
+              return {
+                varKey,
+                state: {
+                  status: 'analyzing',
+                  transformations: transformations,
+                  aiRecommendations: analysis
+                }
+              };
+            }
+          });
+
+          const testResults = await Promise.all(testPromises);
+          testResults.forEach(({ varKey, state }) => {
+            newStates[varKey] = state;
+          });
+
+          return { segmentValue: segment.segmentValue, states: newStates };
+        } catch (err: any) {
+          console.error(`Error analyzing segment ${segment.segment}:`, err);
+          return { segmentValue: segment.segmentValue, error: err.message };
+        }
+      });
+
+      const results = await Promise.all(analysisPromises);
+      
+      // Update segment analysis states
+      const updatedStates: Record<string, Record<string, any>> = { ...segmentAnalysisStates };
+      let successCount = 0;
+      let errorCount = 0;
+
+      results.forEach(result => {
+        if (result.error) {
+          errorCount++;
+        } else if (result.states) {
+          updatedStates[result.segmentValue] = result.states;
+          successCount++;
+        }
+      });
+
+      setSegmentAnalysisStates(updatedStates);
+      
+      if (successCount > 0) {
+        toast.success(`✅ Completed analysis for ${successCount}/${segments.length} segments!`);
+      }
+      if (errorCount > 0) {
+        toast.warning(`⚠️ ${errorCount} segment(s) had insufficient data or errors.`);
+      }
+
+      // Auto-select first analyzed segment
+      if (successCount > 0 && !selectedAnalysisSegment) {
+        const firstAnalyzed = segments.find(s => updatedStates[s.segmentValue]);
+        if (firstAnalyzed) {
+          setSelectedAnalysisSegment(firstAnalyzed.segmentValue);
+        }
+      }
+    } catch (error: any) {
+      console.error('Multi-segment analysis error:', error);
+      toast.error(error.message || "Failed to analyze segments");
+    } finally {
+      setIsAnalyzingAllSegments(false);
+    }
+  };
+
+  // Handle variable states change for a specific segment
+  const handleVariableStatesChange = (segmentValue: string, states: Record<string, any>) => {
+    setSegmentAnalysisStates(prev => ({
+      ...prev,
+      [segmentValue]: states
+    }));
   };
 
   const handleSignOut = async () => {
@@ -550,6 +696,63 @@ const Index = () => {
           <TabsContent value="analysis" className="space-y-6">
             {segments.length > 0 ? (
               <>
+                <Card className="border-primary/20">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Wand2 className="h-5 w-5 text-primary" />
+                      Multi-Segment Analysis
+                    </CardTitle>
+                    <CardDescription>
+                      Run AI transformation analysis on all segments simultaneously, then review and adjust each segment independently
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <Button
+                      onClick={handleRunAllSegmentsAnalysis}
+                      disabled={isAnalyzingAllSegments}
+                      size="lg"
+                      className="w-full"
+                    >
+                      {isAnalyzingAllSegments ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Analyzing {segments.length} Segments...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="mr-2 h-4 w-4" />
+                          Run Analysis on All {segments.length} Segments
+                        </>
+                      )}
+                    </Button>
+                    
+                    {Object.keys(segmentAnalysisStates).length > 0 && (
+                      <div className="pt-2 border-t">
+                        <div className="text-sm font-semibold mb-2">Analysis Status:</div>
+                        <div className="flex flex-wrap gap-2">
+                          {segments.map(segment => {
+                            const hasAnalysis = segmentAnalysisStates[segment.segmentValue];
+                            const transformedCount = hasAnalysis 
+                              ? Object.values(segmentAnalysisStates[segment.segmentValue]).filter((s: any) => s.status === 'transformed').length
+                              : 0;
+                            
+                            return (
+                              <Badge 
+                                key={segment.segmentValue}
+                                variant={hasAnalysis ? "default" : "outline"}
+                                className={hasAnalysis ? "bg-green-500" : ""}
+                              >
+                                {segment.segment}
+                                {hasAnalysis && ` (${transformedCount} vars)`}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
                 <SegmentContextSelector
                   segments={segments}
                   selectedSegment={selectedAnalysisSegment}
@@ -568,12 +771,10 @@ const Index = () => {
                     valueColumn={dependentVariable}
                     regressors={availableRegressors.length > 0 ? availableRegressors : undefined}
                     segmentName={segments.find(s => s.segmentValue === selectedAnalysisSegment)?.segment || ""}
+                    segmentValue={selectedAnalysisSegment}
+                    initialVariableStates={segmentAnalysisStates[selectedAnalysisSegment] || {}}
+                    onVariableStatesChange={handleVariableStatesChange}
                     onTransformationApply={(transformation) => {
-                      // Store analysis state for this segment
-                      setSegmentAnalysisStates(prev => ({
-                        ...prev,
-                        [selectedAnalysisSegment]: transformation
-                      }));
                       console.log("Transformation applied:", transformation);
                       const transformCount = transformation.transformations?.length || 1;
                       toast.success(`${transformCount} transformation(s) applied to ${selectedAnalysisSegment}.`);
@@ -581,7 +782,7 @@ const Index = () => {
                   />
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">
-                    Please select a segment to analyze its data
+                    Please select a segment to review and adjust transformation results
                   </div>
                 )}
               </>
