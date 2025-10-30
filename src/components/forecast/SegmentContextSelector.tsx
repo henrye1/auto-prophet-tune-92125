@@ -38,10 +38,10 @@ export const SegmentContextSelector = ({
         <div className="space-y-2">
           <Label htmlFor="segment-selector">Active Segment</Label>
           <Select value={selectedSegment || ""} onValueChange={onSegmentSelect}>
-            <SelectTrigger id="segment-selector" className="w-full">
+            <SelectTrigger id="segment-selector" className="w-full bg-background">
               <SelectValue placeholder="Select a segment to work with" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-50 bg-background">
               {segments.map((segment) => (
                 <SelectItem key={segment.segment} value={segment.segment}>
                   <div className="flex items-center gap-2">

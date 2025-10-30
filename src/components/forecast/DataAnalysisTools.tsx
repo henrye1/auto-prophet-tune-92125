@@ -44,12 +44,17 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, s
   const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
   const [selectedTransform, setSelectedTransform] = useState<string>("none");
 
+  // Handle datasets with or without regressors
+  const hasRegressors = regressors && regressors.length > 0;
+  
   // Sort regressors by feature importance (highest first)
-  const sortedRegressors = (regressors || []).sort((a, b) => {
-    const importanceA = variableStates[a]?.featureImportance || 0;
-    const importanceB = variableStates[b]?.featureImportance || 0;
-    return importanceB - importanceA;
-  });
+  const sortedRegressors = hasRegressors 
+    ? regressors.sort((a, b) => {
+        const importanceA = variableStates[a]?.featureImportance || 0;
+        const importanceB = variableStates[b]?.featureImportance || 0;
+        return importanceB - importanceA;
+      })
+    : [];
   
   const allVariables = ['dependent', ...sortedRegressors];
   const getVariableDisplayName = (variable: string) => 
@@ -363,7 +368,7 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, s
             AI-Powered Transformation Analysis
           </CardTitle>
           <CardDescription>
-            Automatically analyzes, transforms, and runs statistical tests (ADF, ACF, PACF, correlation) on all variables in parallel
+            Automatically analyzes, transforms, and runs statistical tests (ADF, ACF, PACF{hasRegressors ? ', correlation' : ''}) on {hasRegressors ? 'all variables' : 'the dependent variable'} in parallel
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

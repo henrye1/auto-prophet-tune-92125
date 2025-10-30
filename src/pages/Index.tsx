@@ -400,27 +400,35 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="analysis" className="space-y-6">
-            <SegmentContextSelector
-              segments={segments}
-              selectedSegment={selectedSegment}
-              onSegmentSelect={setSelectedSegment}
-            />
-            {selectedSegment ? (
-              <DataAnalysisTools
-                data={csvData.filter(row => row[segmentColumn] === segments.find(s => s.segment === selectedSegment)?.segmentValue)}
-                dateColumn={dateColumn}
-                valueColumn={dependentVariable}
-                regressors={availableRegressors}
-                segmentName={selectedSegment}
-                onTransformationApply={(transformation) => {
-                  console.log("Transformation applied:", transformation);
-                  const transformCount = transformation.transformations?.length || 1;
-                  toast.success(`${transformCount} transformation(s) applied. Data will be transformed during model training.`);
-                }}
-              />
+            {segments.length > 0 ? (
+              <>
+                <SegmentContextSelector
+                  segments={segments}
+                  selectedSegment={selectedSegment}
+                  onSegmentSelect={setSelectedSegment}
+                />
+                {selectedSegment ? (
+                  <DataAnalysisTools
+                    data={csvData.filter(row => row[segmentColumn] === segments.find(s => s.segment === selectedSegment)?.segmentValue)}
+                    dateColumn={dateColumn}
+                    valueColumn={dependentVariable}
+                    regressors={availableRegressors.length > 0 ? availableRegressors : undefined}
+                    segmentName={selectedSegment}
+                    onTransformationApply={(transformation) => {
+                      console.log("Transformation applied:", transformation);
+                      const transformCount = transformation.transformations?.length || 1;
+                      toast.success(`${transformCount} transformation(s) applied. Data will be transformed during model training.`);
+                    }}
+                  />
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    Please select a segment from the context selector above to analyze data
+                  </div>
+                )}
+              </>
             ) : (
               <div className="text-center py-12 text-muted-foreground">
-                Please select a segment from the context selector above to analyze data
+                Please configure segments first in the Segments tab before analyzing data
               </div>
             )}
             <div className="flex justify-end">
