@@ -16,7 +16,7 @@ import { ForecastResults } from "@/components/forecast/ForecastResults";
 import { PerformanceMetricSelector } from "@/components/forecast/PerformanceMetricSelector";
 import { DataAnalysisTools } from "@/components/forecast/DataAnalysisTools";
 import { SaveModelDialog } from "@/components/forecast/SaveModelDialog";
-import { MultiSegmentSelector } from "@/components/forecast/MultiSegmentSelector";
+
 import { ChevronRight, Play, Save, LogOut, Library } from "lucide-react";
 import { toast } from "sonner";
 import type { ForecastModel, ProphetParameters, SegmentConfig, PerformanceMetric, ForecastConfig } from "@/types/forecast";
@@ -163,7 +163,8 @@ const Index = () => {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [currentModelId, setCurrentModelId] = useState<string | undefined>(undefined);
   const [currentModelName, setCurrentModelName] = useState<string | undefined>(undefined);
-  const [selectedAnalysisSegments, setSelectedAnalysisSegments] = useState<string[]>([]);
+  const [selectedAnalysisSegment, setSelectedAnalysisSegment] = useState<string | null>(null);
+  const [segmentAnalysisStates, setSegmentAnalysisStates] = useState<Record<string, any>>({});
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
@@ -549,33 +550,38 @@ const Index = () => {
           <TabsContent value="analysis" className="space-y-6">
             {segments.length > 0 ? (
               <>
-                <MultiSegmentSelector
+                <SegmentContextSelector
                   segments={segments}
-                  selectedSegments={selectedAnalysisSegments}
-                  onSelectionChange={setSelectedAnalysisSegments}
+                  selectedSegment={selectedAnalysisSegment}
+                  onSegmentSelect={(segmentValue) => {
+                    setSelectedAnalysisSegment(segmentValue);
+                  }}
                 />
-                {selectedAnalysisSegments.length > 0 ? (
+                {selectedAnalysisSegment ? (
                   <DataAnalysisTools
-                    data={csvData.filter(row => 
-                      selectedAnalysisSegments.includes(
-                        segments.find(s => s.segmentValue === row[segmentColumn])?.segmentValue || ""
-                      )
-                    )}
+                    key={selectedAnalysisSegment}
+                    data={csvData.filter(row => {
+                      const segment = segments.find(s => s.segmentValue === row[segmentColumn]);
+                      return segment?.segmentValue === selectedAnalysisSegment;
+                    })}
                     dateColumn={dateColumn}
                     valueColumn={dependentVariable}
                     regressors={availableRegressors.length > 0 ? availableRegressors : undefined}
-                    segmentName={selectedAnalysisSegments.length === 1 
-                      ? segments.find(s => s.segmentValue === selectedAnalysisSegments[0])?.segment || "Multiple Segments"
-                      : "Multiple Segments"}
+                    segmentName={segments.find(s => s.segmentValue === selectedAnalysisSegment)?.segment || ""}
                     onTransformationApply={(transformation) => {
+                      // Store analysis state for this segment
+                      setSegmentAnalysisStates(prev => ({
+                        ...prev,
+                        [selectedAnalysisSegment]: transformation
+                      }));
                       console.log("Transformation applied:", transformation);
                       const transformCount = transformation.transformations?.length || 1;
-                      toast.success(`${transformCount} transformation(s) applied to ${selectedAnalysisSegments.length} segment(s).`);
+                      toast.success(`${transformCount} transformation(s) applied to ${selectedAnalysisSegment}.`);
                     }}
                   />
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">
-                    Please select at least one segment to analyze data
+                    Please select a segment to analyze its data
                   </div>
                 )}
               </>
