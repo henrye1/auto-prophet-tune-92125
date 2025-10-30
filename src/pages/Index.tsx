@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ModelSelector } from "@/components/forecast/ModelSelector";
@@ -13,9 +15,11 @@ import { ForecastProgress } from "@/components/forecast/ForecastProgress";
 import { ForecastResults } from "@/components/forecast/ForecastResults";
 import { PerformanceMetricSelector } from "@/components/forecast/PerformanceMetricSelector";
 import { DataAnalysisTools } from "@/components/forecast/DataAnalysisTools";
-import { ChevronRight, Play } from "lucide-react";
+import { SaveModelDialog } from "@/components/forecast/SaveModelDialog";
+import { MultiSegmentSelector } from "@/components/forecast/MultiSegmentSelector";
+import { ChevronRight, Play, Save, LogOut, Library } from "lucide-react";
 import { toast } from "sonner";
-import type { ForecastModel, ProphetParameters, SegmentConfig, PerformanceMetric } from "@/types/forecast";
+import type { ForecastModel, ProphetParameters, SegmentConfig, PerformanceMetric, ForecastConfig } from "@/types/forecast";
 import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
 
 // Helper function to generate mock forecast results
@@ -141,6 +145,8 @@ const generateMockForecast = (
 };
 
 const Index = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("upload");
   const [selectedModel, setSelectedModel] = useState<ForecastModel>("prophet");
   const [dateColumn, setDateColumn] = useState("");
@@ -154,6 +160,112 @@ const Index = () => {
   const [forecastResults, setForecastResults] = useState<ForecastResultsType | null>(null);
   const [selectedMetrics, setSelectedMetrics] = useState<PerformanceMetric[]>(['mae', 'rmse', 'mape', 'coverage']);
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [currentModelId, setCurrentModelId] = useState<string | undefined>(undefined);
+  const [currentModelName, setCurrentModelName] = useState<string | undefined>(undefined);
+  const [selectedAnalysisSegments, setSelectedAnalysisSegments] = useState<string[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    // Check authentication
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setIsAuthenticated(true);
+      } else {
+        navigate("/auth");
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        setIsAuthenticated(true);
+      } else {
+        navigate("/auth");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  useEffect(() => {
+    // Load model if modelId is in URL
+    const modelId = searchParams.get("modelId");
+    if (modelId && isAuthenticated) {
+      loadModel(modelId);
+    }
+  }, [searchParams, isAuthenticated]);
+
+  const loadModel = async (modelId: string) => {
+    const { data: model, error } = await supabase
+      .from("saved_models")
+      .select("*")
+      .eq("id", modelId)
+      .single();
+
+    if (error) {
+      toast.error("Failed to load model");
+      console.error(error);
+      return;
+    }
+
+    const { data: modelSegments, error: segmentsError } = await supabase
+      .from("model_segments")
+      .select("*")
+      .eq("model_id", modelId);
+
+    if (segmentsError) {
+      toast.error("Failed to load model segments");
+      console.error(segmentsError);
+      return;
+    }
+
+    setCurrentModelId(model.id);
+    setCurrentModelName(model.model_name);
+    setSelectedModel(model.model_type as ForecastModel);
+    setDateColumn(model.date_column);
+    setSegmentColumn(model.segment_column);
+    setDependentVariable(model.dependent_variable);
+    setSelectedMetrics((model.performance_metrics as any) || ['mae', 'rmse', 'mape', 'coverage']);
+    
+    const loadedSegments: SegmentConfig[] = modelSegments.map((ms: any) => ({
+      segment: ms.segment,
+      segmentValue: ms.segment_value,
+      regressors: ms.regressors || [],
+      forecast_periods: ms.forecast_periods,
+      frequency: ms.frequency,
+      total_records: ms.total_records,
+      training_records: ms.training_records,
+      test_records: ms.test_records,
+      prophet_params: ms.prophet_params,
+      autogluon_params: ms.autogluon_params,
+      traditional_params: ms.traditional_params,
+    }));
+    
+    setSegments(loadedSegments);
+    toast.success(`Model "${model.model_name}" loaded successfully`);
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
+  };
+
+  const handleSaveModel = () => {
+    if (segments.length === 0) {
+      toast.error("Please configure at least one segment before saving");
+      return;
+    }
+    setSaveDialogOpen(true);
+  };
+
+  const getCurrentConfig = (): ForecastConfig => ({
+    model: selectedModel,
+    date_column: dateColumn,
+    segment_column: segmentColumn,
+    dependent_variable: dependentVariable,
+    segments: segments,
+    performance_metrics: selectedMetrics,
+  });
 
   const handleDataLoaded = (data: any[], headers: string[]) => {
     setCsvData(data);
@@ -331,12 +443,30 @@ const Index = () => {
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
       <div className="container mx-auto py-8 px-4">
         <header className="mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent mb-2">
-            Time Series Forecasting Platform
-          </h1>
-          <p className="text-muted-foreground">
-            Configure and run Prophet and AutoGluon forecasting models with advanced parameter tuning
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent mb-2">
+                Time Series Forecasting Platform
+              </h1>
+              <p className="text-muted-foreground">
+                Configure and run Prophet and AutoGluon forecasting models with advanced parameter tuning
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => navigate("/models")}>
+                <Library className="mr-2 h-4 w-4" />
+                My Models
+              </Button>
+              <Button variant="outline" onClick={handleSaveModel} disabled={segments.length === 0}>
+                <Save className="mr-2 h-4 w-4" />
+                {currentModelId ? "Update Model" : "Save Model"}
+              </Button>
+              <Button variant="outline" onClick={handleSignOut}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign Out
+              </Button>
+            </div>
+          </div>
         </header>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -419,27 +549,33 @@ const Index = () => {
           <TabsContent value="analysis" className="space-y-6">
             {segments.length > 0 ? (
               <>
-                <SegmentContextSelector
+                <MultiSegmentSelector
                   segments={segments}
-                  selectedSegment={selectedSegment}
-                  onSegmentSelect={setSelectedSegment}
+                  selectedSegments={selectedAnalysisSegments}
+                  onSelectionChange={setSelectedAnalysisSegments}
                 />
-                {selectedSegment ? (
+                {selectedAnalysisSegments.length > 0 ? (
                   <DataAnalysisTools
-                    data={csvData.filter(row => row[segmentColumn] === segments.find(s => s.segment === selectedSegment)?.segmentValue)}
+                    data={csvData.filter(row => 
+                      selectedAnalysisSegments.includes(
+                        segments.find(s => s.segmentValue === row[segmentColumn])?.segmentValue || ""
+                      )
+                    )}
                     dateColumn={dateColumn}
                     valueColumn={dependentVariable}
                     regressors={availableRegressors.length > 0 ? availableRegressors : undefined}
-                    segmentName={selectedSegment}
+                    segmentName={selectedAnalysisSegments.length === 1 
+                      ? segments.find(s => s.segmentValue === selectedAnalysisSegments[0])?.segment || "Multiple Segments"
+                      : "Multiple Segments"}
                     onTransformationApply={(transformation) => {
                       console.log("Transformation applied:", transformation);
                       const transformCount = transformation.transformations?.length || 1;
-                      toast.success(`${transformCount} transformation(s) applied. Data will be transformed during model training.`);
+                      toast.success(`${transformCount} transformation(s) applied to ${selectedAnalysisSegments.length} segment(s).`);
                     }}
                   />
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">
-                    Please select a segment from the context selector above to analyze data
+                    Please select at least one segment to analyze data
                   </div>
                 )}
               </>
@@ -552,6 +688,14 @@ const Index = () => {
             {forecastResults && <ForecastResults results={forecastResults} selectedMetrics={selectedMetrics} />}
           </TabsContent>
         </Tabs>
+
+        <SaveModelDialog
+          open={saveDialogOpen}
+          onOpenChange={setSaveDialogOpen}
+          config={getCurrentConfig()}
+          existingModelId={currentModelId}
+          existingModelName={currentModelName}
+        />
       </div>
     </div>
   );
