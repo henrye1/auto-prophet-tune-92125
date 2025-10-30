@@ -66,6 +66,11 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, s
 
   // Run AI analysis on all variables
   const runAIAnalysis = async () => {
+    if (data.length < 10) {
+      toast.error(`Insufficient data: need at least 10 data points, got ${data.length}. Please select a segment with data.`);
+      return;
+    }
+
     setIsAIAnalyzing(true);
     toast.info("AI is analyzing and transforming all variables...");
 
@@ -183,6 +188,11 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, s
 
   const addTransformation = async () => {
     if (selectedTransform === "none") return;
+    
+    if (data.length < 10) {
+      toast.error(`Insufficient data: need at least 10 data points, got ${data.length}. Please select a segment with data.`);
+      return;
+    }
 
     const newState = { ...currentState };
     if (newState.transformations.length === 0) {
@@ -359,7 +369,7 @@ export const DataAnalysisTools = ({ data, dateColumn, valueColumn, regressors, s
         <CardContent className="space-y-4">
           <Button 
             onClick={runAIAnalysis} 
-            disabled={isAIAnalyzing}
+            disabled={isAIAnalyzing || data.length < 10}
             size="lg"
             className="w-full"
           >
