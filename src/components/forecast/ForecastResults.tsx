@@ -156,7 +156,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                 <ResponsiveContainer width="100%" height={400}>
                   <AreaChart data={[...segment.training_data, ...segment.test_data, ...segment.forecast_data]}>
                     <defs>
-                      <linearGradient id="confidenceGradient" x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient id={`confidenceGradient-${segment.segment}`} x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="rgb(16, 185, 129)" stopOpacity={0.25} />
                         <stop offset="95%" stopColor="rgb(16, 185, 129)" stopOpacity={0.05} />
                       </linearGradient>
@@ -186,7 +186,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       stroke="rgb(16, 185, 129)"
                       strokeWidth={1}
                       strokeOpacity={0.3}
-                      fill="url(#confidenceGradient)"
+                      fill={`url(#confidenceGradient-${segment.segment})`}
                       name="Upper Bound (95%)"
                     />
                     <Area
@@ -195,7 +195,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       stroke="rgb(16, 185, 129)"
                       strokeWidth={1}
                       strokeOpacity={0.3}
-                      fill="url(#confidenceGradient)"
+                      fill={`url(#confidenceGradient-${segment.segment})`}
                       name="Lower Bound (95%)"
                     />
                     
