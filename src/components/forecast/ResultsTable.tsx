@@ -1,8 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download, ChevronDown } from "lucide-react";
+import { Download } from "lucide-react";
 import type { ForecastPoint } from "@/types/forecastResults";
 
 interface ResultsTableProps {
@@ -31,16 +30,12 @@ export const ResultsTable = ({
   const allData = [...trainingData, ...testData, ...forecastData];
   const hasBenchmark = benchmarkModel && benchmarkTestData && benchmarkForecastData;
 
-  const exportToCSV = (includeTraining: boolean = true) => {
-    const dataToExport = includeTraining 
-      ? allData 
-      : [...testData, ...forecastData];
-
+  const exportToCSV = () => {
     const headers = hasBenchmark
       ? ["Date", "Actual", `${primaryModel}_Predicted`, `${primaryModel}_Lower`, `${primaryModel}_Upper`, `${benchmarkModel}_Predicted`, `${benchmarkModel}_Lower`, `${benchmarkModel}_Upper`, "Type"]
       : ["Date", "Actual", "Predicted", "Lower Bound", "Upper Bound", "Type"];
     
-    const rows = dataToExport.map((point) => {
+    const rows = allData.map((point, idx) => {
       const benchmarkPoint = hasBenchmark ? (
         point.is_test 
           ? benchmarkTestData[testData.findIndex(t => t.date === point.date)]
@@ -80,8 +75,7 @@ export const ResultsTable = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    const suffix = includeTraining ? "all" : "test_forecast";
-    link.download = `forecast_results_${segment}_${suffix}_${new Date().toISOString()}.csv`;
+    link.download = `forecast_results_${segment}_${new Date().toISOString()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -97,23 +91,10 @@ export const ResultsTable = ({
               {hasBenchmark && ` (includes ${benchmarkModel} benchmark)`}
             </CardDescription>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Download className="mr-2 h-4 w-4" />
-                Export CSV
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => exportToCSV(true)}>
-                Export All Data ({allData.length} rows)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportToCSV(false)}>
-                Export Test & Forecast Only ({testData.length + forecastData.length} rows)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button onClick={exportToCSV} variant="outline" size="sm">
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
         </div>
       </CardHeader>
       <CardContent>

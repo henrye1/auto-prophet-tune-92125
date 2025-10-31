@@ -14,39 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      forecast_reports: {
-        Row: {
-          created_at: string
-          file_url: string | null
-          id: string
-          model_id: string | null
-          report_data: Json
-          report_name: string
-          report_type: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          file_url?: string | null
-          id?: string
-          model_id?: string | null
-          report_data: Json
-          report_name: string
-          report_type: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          file_url?: string | null
-          id?: string
-          model_id?: string | null
-          report_data?: Json
-          report_name?: string
-          report_type?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       model_segments: {
         Row: {
           autogluon_params: Json | null
