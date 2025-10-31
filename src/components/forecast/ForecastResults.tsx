@@ -1,20 +1,16 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, ReferenceLine } from "recharts";
-import { TrendingUp, Target, Activity, Wand2, FileText } from "lucide-react";
+import { TrendingUp, Target, Activity, Wand2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { ResultsTable } from "./ResultsTable";
-import { ReportGenerator } from "./ReportGenerator";
 import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
 import type { PerformanceMetric } from "@/types/forecast";
-import { useNavigate } from "react-router-dom";
 
 interface ForecastResultsProps {
   results: ForecastResultsType;
   selectedMetrics: PerformanceMetric[];
-  modelId?: string;
 }
 
 const metricLabels: Record<PerformanceMetric, string> = {
@@ -28,9 +24,7 @@ const metricLabels: Record<PerformanceMetric, string> = {
   mase: "MASE",
 };
 
-export const ForecastResults = ({ results, selectedMetrics, modelId }: ForecastResultsProps) => {
-  const navigate = useNavigate();
-
+export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsProps) => {
   if (!results || results.segments.length === 0) {
     return (
       <Card>
@@ -44,32 +38,16 @@ export const ForecastResults = ({ results, selectedMetrics, modelId }: ForecastR
   }
 
   return (
-    <div id="forecast-results-container" className="space-y-6">
+    <div className="space-y-6">
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                Forecast Results
-              </CardTitle>
-              <CardDescription>
-                Model: {results.model} | Generated: {new Date(results.timestamp).toLocaleString()}
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => navigate(modelId ? `/reports?modelId=${modelId}` : "/reports")}
-                className="gap-2"
-              >
-                <FileText className="h-4 w-4" />
-                View Saved Reports
-              </Button>
-              <ReportGenerator results={results} modelId={modelId} />
-            </div>
-          </div>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Forecast Results
+          </CardTitle>
+          <CardDescription>
+            Model: {results.model} | Generated: {new Date(results.timestamp).toLocaleString()}
+          </CardDescription>
         </CardHeader>
       </Card>
 
