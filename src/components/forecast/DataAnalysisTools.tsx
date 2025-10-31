@@ -1046,68 +1046,126 @@ export const DataAnalysisTools = ({
                     </Card>
                   )}
 
-                  {/* ACF/PACF Charts */}
-                  {currentState.acfData && currentState.pacfData && (
+                  {/* ACF/PACF Charts - Before and After Comparison */}
+                  {currentState.beforeStats && currentState.afterStats && (
                     <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <Card className="bg-muted/50">
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-xs">ACF (Autocorrelation)</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <ResponsiveContainer width="100%" height={120}>
-                              <BarChart data={currentState.acfData.lags.map((lag: number, i: number) => ({
-                                lag,
-                                correlation: currentState.acfData.correlations[i]
-                              }))}>
-                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                                <XAxis dataKey="lag" tick={{ fontSize: 8 }} />
-                                <YAxis domain={[-1, 1]} tick={{ fontSize: 8 }} />
-                                <Tooltip />
-                                <ReferenceLine y={currentState.acfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
-                                <ReferenceLine y={-currentState.acfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
-                                <Bar dataKey="correlation" fill="hsl(var(--primary))" />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </CardContent>
-                        </Card>
+                      {/* Original Data ACF/PACF */}
+                      <Card className="border-orange-500/20">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm flex items-center gap-2">
+                            <BarChart3 className="h-4 w-4 text-orange-500" />
+                            Original Data - ACF & PACF
+                          </CardTitle>
+                          <CardDescription className="text-xs">
+                            Autocorrelation patterns before transformation
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <div className="text-xs font-semibold mb-2">ACF (Autocorrelation)</div>
+                              <ResponsiveContainer width="100%" height={140}>
+                                <BarChart data={currentState.beforeStats.acf.lags.map((lag: number, i: number) => ({
+                                  lag,
+                                  correlation: currentState.beforeStats.acf.correlations[i]
+                                }))}>
+                                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                  <XAxis dataKey="lag" tick={{ fontSize: 8 }} />
+                                  <YAxis domain={[-1, 1]} tick={{ fontSize: 8 }} />
+                                  <Tooltip />
+                                  <ReferenceLine y={currentState.beforeStats.acf.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                                  <ReferenceLine y={-currentState.beforeStats.acf.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                                  <Bar dataKey="correlation" fill="hsl(var(--orange))" />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
 
-                        <Card className="bg-muted/50">
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-xs">PACF (Partial Autocorrelation)</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <ResponsiveContainer width="100%" height={120}>
-                              <BarChart data={currentState.pacfData.lags.map((lag: number, i: number) => ({
-                                lag,
-                                correlation: currentState.pacfData.correlations[i]
-                              }))}>
-                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                                <XAxis dataKey="lag" tick={{ fontSize: 8 }} />
-                                <YAxis domain={[-1, 1]} tick={{ fontSize: 8 }} />
-                                <Tooltip />
-                                <ReferenceLine y={currentState.pacfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
-                                <ReferenceLine y={-currentState.pacfData.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
-                                <Bar dataKey="correlation" fill="hsl(var(--chart-2))" />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </CardContent>
-                        </Card>
-                      </div>
+                            <div>
+                              <div className="text-xs font-semibold mb-2">PACF (Partial Autocorrelation)</div>
+                              <ResponsiveContainer width="100%" height={140}>
+                                <BarChart data={currentState.beforeStats.pacf.lags.map((lag: number, i: number) => ({
+                                  lag,
+                                  correlation: currentState.beforeStats.pacf.correlations[i]
+                                }))}>
+                                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                  <XAxis dataKey="lag" tick={{ fontSize: 8 }} />
+                                  <YAxis domain={[-1, 1]} tick={{ fontSize: 8 }} />
+                                  <Tooltip />
+                                  <ReferenceLine y={currentState.beforeStats.pacf.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                                  <ReferenceLine y={-currentState.beforeStats.pacf.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                                  <Bar dataKey="correlation" fill="hsl(var(--orange))" />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Transformed Data ACF/PACF */}
+                      <Card className="border-green-500/20">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm flex items-center gap-2">
+                            <BarChart3 className="h-4 w-4 text-green-500" />
+                            Transformed Data - ACF & PACF
+                          </CardTitle>
+                          <CardDescription className="text-xs">
+                            Autocorrelation patterns after applying transformations
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <div className="text-xs font-semibold mb-2">ACF (Autocorrelation)</div>
+                              <ResponsiveContainer width="100%" height={140}>
+                                <BarChart data={currentState.afterStats.acf.lags.map((lag: number, i: number) => ({
+                                  lag,
+                                  correlation: currentState.afterStats.acf.correlations[i]
+                                }))}>
+                                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                  <XAxis dataKey="lag" tick={{ fontSize: 8 }} />
+                                  <YAxis domain={[-1, 1]} tick={{ fontSize: 8 }} />
+                                  <Tooltip />
+                                  <ReferenceLine y={currentState.afterStats.acf.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                                  <ReferenceLine y={-currentState.afterStats.acf.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                                  <Bar dataKey="correlation" fill="hsl(var(--primary))" />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+
+                            <div>
+                              <div className="text-xs font-semibold mb-2">PACF (Partial Autocorrelation)</div>
+                              <ResponsiveContainer width="100%" height={140}>
+                                <BarChart data={currentState.afterStats.pacf.lags.map((lag: number, i: number) => ({
+                                  lag,
+                                  correlation: currentState.afterStats.pacf.correlations[i]
+                                }))}>
+                                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                  <XAxis dataKey="lag" tick={{ fontSize: 8 }} />
+                                  <YAxis domain={[-1, 1]} tick={{ fontSize: 8 }} />
+                                  <Tooltip />
+                                  <ReferenceLine y={currentState.afterStats.pacf.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                                  <ReferenceLine y={-currentState.afterStats.pacf.confidence_interval} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />
+                                  <Bar dataKey="correlation" fill="hsl(var(--chart-2))" />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
 
                       {/* Interpretation Commentary */}
                       <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
                         <CardHeader className="pb-2">
                           <CardTitle className="text-xs flex items-center gap-2">
                             <BarChart3 className="h-4 w-4" />
-                            Time Series Process Identification
+                            Time Series Process Identification (Transformed Data)
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3 text-xs">
                           {(() => {
-                            const acf = currentState.acfData.correlations.slice(1);
-                            const pacf = currentState.pacfData.correlations.slice(1);
-                            const ci = currentState.acfData.confidence_interval;
+                            const acf = currentState.afterStats.acf.correlations.slice(1);
+                            const pacf = currentState.afterStats.pacf.correlations.slice(1);
+                            const ci = currentState.afterStats.acf.confidence_interval;
                             
                             // Count significant lags
                             const significantACF = acf.filter((v: number) => Math.abs(v) > ci).length;
