@@ -418,36 +418,42 @@ export const ProphetHyperparameters = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="lower-bound">Custom Lower Percentile</Label>
+                  <Label htmlFor="lower-bound">Custom Lower Percentile (1-49)</Label>
                   <Input
                     id="lower-bound"
                     type="number"
-                    min={0.01}
-                    max={0.49}
-                    step={0.01}
-                    placeholder="e.g., 0.05 for 5th percentile"
-                    value={parameters.lower_bound || ''}
-                    onChange={(e) => updateParameter('lower_bound', e.target.value ? parseFloat(e.target.value) : undefined)}
+                    min={1}
+                    max={49}
+                    step={1}
+                    placeholder="e.g., 5 for 5th percentile"
+                    value={parameters.lower_bound ? Math.round(parameters.lower_bound * 100) : ''}
+                    onChange={(e) => {
+                      const value = e.target.value ? parseFloat(e.target.value) / 100 : undefined;
+                      updateParameter('lower_bound', value);
+                    }}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Optional: override default lower bound
+                    Optional: Enter as whole number (e.g., 5 = 5th percentile)
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="upper-bound">Custom Upper Percentile</Label>
+                  <Label htmlFor="upper-bound">Custom Upper Percentile (51-99)</Label>
                   <Input
                     id="upper-bound"
                     type="number"
-                    min={0.51}
-                    max={0.99}
-                    step={0.01}
-                    placeholder="e.g., 0.95 for 95th percentile"
-                    value={parameters.upper_bound || ''}
-                    onChange={(e) => updateParameter('upper_bound', e.target.value ? parseFloat(e.target.value) : undefined)}
+                    min={51}
+                    max={99}
+                    step={1}
+                    placeholder="e.g., 95 for 95th percentile"
+                    value={parameters.upper_bound ? Math.round(parameters.upper_bound * 100) : ''}
+                    onChange={(e) => {
+                      const value = e.target.value ? parseFloat(e.target.value) / 100 : undefined;
+                      updateParameter('upper_bound', value);
+                    }}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Optional: override default upper bound
+                    Optional: Enter as whole number (e.g., 95 = 95th percentile)
                   </p>
                 </div>
               </div>
