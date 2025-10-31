@@ -172,9 +172,13 @@ export const ForecastResults = ({ results, selectedMetrics, config, csvData, mod
                     <div className="w-3 h-3 rounded-full bg-blue-600 mr-2" />
                     Actual Data
                   </Badge>
+                  <Badge variant="outline" className="bg-gray-500/10 border-gray-500/30">
+                    <div className="w-3 h-3 rounded-full bg-gray-600 mr-2" />
+                    Training Fit
+                  </Badge>
                   <Badge variant="outline" className="bg-orange-500/10 border-orange-500/30">
                     <div className="w-3 h-3 rounded-full bg-orange-600 mr-2" />
-                    Fitted (Test)
+                    Test Predictions
                   </Badge>
                   <Badge variant="outline" className="bg-purple-500/10 border-purple-500/30">
                     <div className="w-3 h-3 rounded-full bg-purple-600 mr-2" />
@@ -201,11 +205,18 @@ export const ForecastResults = ({ results, selectedMetrics, config, csvData, mod
                       const forecastStartIdx = testEndIdx;
                       
                       // Determine which fields to populate based on data type
+                      let training_predicted = null;
                       let fitted = null;
                       let forecast = null;
                       let benchmark_predicted = null;
                       
-                      if (idx >= testStartIdx && idx < testEndIdx) {
+                      if (idx < testStartIdx) {
+                        // This is training data - show backfill/fitted predictions if available
+                        training_predicted = point.predicted;
+                        if (segment.benchmark_training_data) {
+                          benchmark_predicted = segment.benchmark_training_data[idx]?.predicted;
+                        }
+                      } else if (idx >= testStartIdx && idx < testEndIdx) {
                         // This is test data - show fitted line
                         fitted = point.predicted;
                         if (segment.benchmark_test_data) {
@@ -221,6 +232,7 @@ export const ForecastResults = ({ results, selectedMetrics, config, csvData, mod
                       
                       return { 
                         ...point, 
+                        training_predicted,
                         fitted,
                         forecast,
                         benchmark_predicted 
@@ -282,6 +294,19 @@ export const ForecastResults = ({ results, selectedMetrics, config, csvData, mod
                       connectNulls={true}
                     />
                     
+                    {/* Training predictions (backfill) - only shown if available */}
+                    <Line
+                      type="monotone"
+                      dataKey="training_predicted"
+                      stroke="rgb(107, 114, 128)"
+                      strokeWidth={1.5}
+                      strokeDasharray="2 2"
+                      dot={false}
+                      name="Training Fit"
+                      connectNulls={true}
+                      strokeOpacity={0.6}
+                    />
+                    
                     {/* Test predictions (fitted) */}
                     <Line
                       type="monotone"
@@ -290,7 +315,7 @@ export const ForecastResults = ({ results, selectedMetrics, config, csvData, mod
                       strokeWidth={2.5}
                       strokeDasharray="5 5"
                       dot={{ fill: 'rgb(249, 115, 22)', r: 3 }}
-                      name="Fitted (Test)"
+                      name="Test Predictions"
                       connectNulls={true}
                     />
                     
