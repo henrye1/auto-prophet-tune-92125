@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Upload, FileSpreadsheet, CheckCircle2, X } from "lucide-react";
+import { Upload, FileSpreadsheet, CheckCircle2, X, Download } from "lucide-react";
 import Papa from "papaparse";
 import { toast } from "sonner";
 
@@ -10,13 +10,44 @@ interface DataUploadProps {
   onDataLoaded: (data: any[], headers: string[]) => void;
   onClear: () => void;
   hasData: boolean;
+  csvData?: any[];
+  availableColumns?: string[];
 }
 
-export const DataUpload = ({ onDataLoaded, onClear, hasData }: DataUploadProps) => {
+export const DataUpload = ({ onDataLoaded, onClear, hasData, csvData = [], availableColumns = [] }: DataUploadProps) => {
   const [fileName, setFileName] = useState<string>("");
   const [rowCount, setRowCount] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+
+  const handleDownload = () => {
+    if (csvData.length === 0 || availableColumns.length === 0) {
+      toast.error("No data available to download");
+      return;
+    }
+
+    try {
+      // Convert data to CSV format using Papa Parse
+      const csv = Papa.unparse({
+        fields: availableColumns,
+        data: csvData
+      });
+
+      // Create blob and download
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName || 'data_export.csv';
+      link.click();
+      URL.revokeObjectURL(url);
+      
+      toast.success("CSV file downloaded successfully");
+    } catch (error) {
+      console.error("Error downloading CSV:", error);
+      toast.error("Failed to download CSV file");
+    }
+  };
 
   const processFile = useCallback((file: File) => {
     if (!file.name.endsWith('.csv')) {
@@ -153,9 +184,15 @@ export const DataUpload = ({ onDataLoaded, onClear, hasData }: DataUploadProps) 
                   </div>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" onClick={handleClear}>
-                <X className="h-4 w-4" />
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={handleDownload}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download CSV
+                </Button>
+                <Button variant="ghost" size="sm" onClick={handleClear}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
         )}

@@ -752,6 +752,8 @@ const Index = () => {
               onDataLoaded={handleDataLoaded}
               onClear={handleClearData}
               hasData={csvData.length > 0}
+              csvData={csvData}
+              availableColumns={availableColumns}
             />
             {csvData.length > 0 && (
               <div className="flex justify-end">
