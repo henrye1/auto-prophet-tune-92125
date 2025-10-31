@@ -62,29 +62,49 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
 
         {results.segments.map((segment, idx) => (
           <TabsContent key={idx} value={segment.segment} className="space-y-6">
-            {/* Metrics Card */}
+            {/* Metrics Card - Primary Model */}
             {segment.metrics && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <Target className="h-4 w-4" />
-                    Model Performance
+                    Model Performance: {segment.model || results.model}
                   </CardTitle>
+                  {segment.benchmark_model && (
+                    <CardDescription>
+                      Comparing with AI-recommended benchmark: {segment.benchmark_model}
+                    </CardDescription>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {selectedMetrics.map((metric) => {
                       const value = segment.metrics?.[metric];
+                      const benchmarkValue = segment.benchmark_metrics?.[metric];
                       if (value === undefined) return null;
                       
                       const isPercentage = ['mape', 'coverage', 'smape', 'r2'].includes(metric);
+                      const isBetter = benchmarkValue !== undefined && (
+                        ['mae', 'rmse', 'mse', 'mape', 'smape', 'mase'].includes(metric) 
+                          ? value < benchmarkValue 
+                          : value > benchmarkValue
+                      );
+                      
                       return (
                         <div key={metric} className="space-y-1">
                           <p className="text-xs text-muted-foreground">{metricLabels[metric]}</p>
-                          <p className="text-2xl font-bold">
-                            {value.toFixed(metric === 'r2' ? 3 : isPercentage ? 1 : 2)}
-                            {isPercentage && metric !== 'r2' ? '%' : ''}
-                          </p>
+                          <div className="flex items-baseline gap-2">
+                            <p className={`text-2xl font-bold ${isBetter ? 'text-green-600' : ''}`}>
+                              {value.toFixed(metric === 'r2' ? 3 : isPercentage ? 1 : 2)}
+                              {isPercentage && metric !== 'r2' ? '%' : ''}
+                            </p>
+                            {benchmarkValue !== undefined && (
+                              <p className="text-sm text-muted-foreground">
+                                vs {benchmarkValue.toFixed(metric === 'r2' ? 3 : isPercentage ? 1 : 2)}
+                                {isPercentage && metric !== 'r2' ? '%' : ''}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -257,11 +277,18 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                   <CardTitle className="text-lg">Test Set Performance</CardTitle>
                   <CardDescription>
                     Model predictions vs actual values on holdout test data
+                    {segment.benchmark_model && ` (includes ${segment.benchmark_model} benchmark)`}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={segment.test_data}>
+                    <LineChart data={segment.benchmark_test_data ? 
+                      segment.test_data.map((d, i) => ({
+                        ...d,
+                        benchmark_predicted: segment.benchmark_test_data?.[i]?.predicted
+                      })) : 
+                      segment.test_data
+                    }>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                       <XAxis 
                         dataKey="date" 
@@ -292,8 +319,18 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                         stroke="rgb(249, 115, 22)"
                         strokeWidth={2.5}
                         strokeDasharray="5 5"
-                        name="Fitted"
+                        name={`${segment.model || results.model}`}
                       />
+                      {segment.benchmark_test_data && (
+                        <Line
+                          type="monotone"
+                          dataKey="benchmark_predicted"
+                          stroke="rgb(99, 102, 241)"
+                          strokeWidth={2.5}
+                          strokeDasharray="3 3"
+                          name={`${segment.benchmark_model} (Benchmark)`}
+                        />
+                      )}
                     </LineChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -306,6 +343,11 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
               trainingData={segment.training_data}
               testData={segment.test_data}
               forecastData={segment.forecast_data}
+              primaryModel={segment.model || results.model}
+              benchmarkModel={segment.benchmark_model}
+              benchmarkTrainingData={segment.benchmark_training_data}
+              benchmarkTestData={segment.benchmark_test_data}
+              benchmarkForecastData={segment.benchmark_forecast_data}
             />
           </TabsContent>
         ))}

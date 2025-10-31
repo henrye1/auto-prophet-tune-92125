@@ -46,10 +46,22 @@ Available transformations:
 4. seasonal_difference - Seasonal differencing (removes seasonal patterns)
 5. box_cox - Power transformation (flexible variance stabilization)
 
-For each variable, suggest 1-3 transformations to apply in sequence. Consider:
+Available forecasting models:
+- prophet: Facebook's Prophet (best for data with strong seasonality and holidays)
+- autogluon: AutoML ensemble (best for complex patterns and automatic feature engineering)
+- arima: ARIMA (best for linear patterns with clear autocorrelation)
+- ar: AutoRegressive (best for short-term dependencies)
+- arma: ARMA (best for stationary series with both AR and MA components)
+
+For each variable, suggest:
+1. 1-3 transformations to apply in sequence
+2. The most appropriate forecasting model based on the data characteristics
+
+Consider:
 - Data characteristics (trend, seasonality, variance patterns)
 - The goal of achieving stationarity
 - Whether it's a dependent variable or regressor
+- Which model best fits the observed patterns
 
 Return ONLY valid JSON in this exact format (no markdown, no extra text):
 {
@@ -65,7 +77,9 @@ Return ONLY valid JSON in this exact format (no markdown, no extra text):
         }
       ],
       "rationale": "overall analysis summary",
-      "confidence": "high" or "medium" or "low"
+      "confidence": "high" or "medium" or "low",
+      "recommended_model": "prophet" or "autogluon" or "arima" or "ar" or "arma",
+      "model_rationale": "why this model is best for this data"
     }
   ]
 }`;

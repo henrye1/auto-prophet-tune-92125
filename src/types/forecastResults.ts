@@ -25,6 +25,21 @@ export interface SegmentForecastResult {
     mase?: number;
   };
   ai_commentary?: string;
+  model?: string;
+  benchmark_model?: string;
+  benchmark_training_data?: ForecastPoint[];
+  benchmark_test_data?: ForecastPoint[];
+  benchmark_forecast_data?: ForecastPoint[];
+  benchmark_metrics?: {
+    mae?: number;
+    rmse?: number;
+    mape?: number;
+    mse?: number;
+    r2?: number;
+    coverage?: number;
+    smape?: number;
+    mase?: number;
+  };
 }
 
 export interface ForecastResults {

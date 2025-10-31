@@ -354,6 +354,8 @@ const Index = () => {
                   status: 'transformed',
                   transformations: transformations,
                   aiRecommendations: analysis,
+                  recommendedModel: analysis.recommended_model,
+                  modelRationale: analysis.model_rationale,
                   stationarityTest: testResults.after?.adf || testResults.before.adf,
                   acfData: testResults.after?.acf || testResults.before.acf,
                   pacfData: testResults.after?.pacf || testResults.before.pacf,
@@ -537,6 +539,11 @@ const Index = () => {
       const trainingData = segmentData.slice(0, segment.training_records);
       const testData = segmentData.slice(segment.training_records, segment.training_records + segment.test_records);
       
+      // Get recommended model from analysis if available
+      const analysisState = segmentAnalysisStates[segment.segmentValue];
+      const recommendedModel = analysisState?.dependent?.recommendedModel;
+      const shouldRunBenchmark = recommendedModel && recommendedModel !== selectedModel;
+      
       // Update status to running
       setSegmentProgress(prev => 
         prev.map((p, idx) => 
@@ -544,7 +551,7 @@ const Index = () => {
             ...p, 
             status: 'running', 
             progress: 0, 
-            message: `Using ${trainingData.length} records for training, ${testData.length} for testing` 
+            message: `Using ${trainingData.length} records for training, ${testData.length} for testing${shouldRunBenchmark ? ` + benchmark (${recommendedModel})` : ''}` 
           } : p
         )
       );
@@ -552,16 +559,27 @@ const Index = () => {
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Simulate model training stages
-      const stages = [
-        { progress: 25, message: `Training on ${trainingData.length} records...` },
-        { progress: 50, message: `Validating on ${testData.length} test records...` },
-        { progress: 75, message: 'Cross-validation...' },
-        { progress: 90, message: `Forecasting ${segment.forecast_periods} periods...` },
-        { progress: 100, message: 'Complete' },
-      ];
+      const stages = shouldRunBenchmark 
+        ? [
+            { progress: 12, message: `Training ${selectedModel} on ${trainingData.length} records...` },
+            { progress: 25, message: `Validating ${selectedModel} on ${testData.length} test records...` },
+            { progress: 37, message: `${selectedModel} cross-validation...` },
+            { progress: 50, message: `${selectedModel} forecasting ${segment.forecast_periods} periods...` },
+            { progress: 62, message: `Training benchmark ${recommendedModel}...` },
+            { progress: 75, message: `Validating benchmark ${recommendedModel}...` },
+            { progress: 87, message: `${recommendedModel} cross-validation...` },
+            { progress: 100, message: 'Complete' },
+          ]
+        : [
+            { progress: 25, message: `Training on ${trainingData.length} records...` },
+            { progress: 50, message: `Validating on ${testData.length} test records...` },
+            { progress: 75, message: 'Cross-validation...' },
+            { progress: 90, message: `Forecasting ${segment.forecast_periods} periods...` },
+            { progress: 100, message: 'Complete' },
+          ];
 
       for (const stage of stages) {
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, shouldRunBenchmark ? 600 : 800));
         setSegmentProgress(prev =>
           prev.map((p, idx) =>
             idx === i ? { ...p, progress: stage.progress, message: stage.message } : p
@@ -604,7 +622,60 @@ const Index = () => {
         dependentVariable,
         prophetParams,
         selectedMetrics
-      );
+      ) as any;
+      mockResults.model = selectedModel;
+
+      // Run benchmark model if recommended and different from selected
+      if (shouldRunBenchmark) {
+        const benchmarkResults = generateMockForecast(
+          trainingData,
+          testData,
+          segment,
+          dateColumn,
+          dependentVariable,
+          prophetParams,
+          selectedMetrics
+        );
+        
+        // Add slight variations to benchmark to simulate different model behavior
+        mockResults.benchmark_model = recommendedModel;
+        mockResults.benchmark_training_data = benchmarkResults.training_data.map(p => ({
+          ...p,
+          predicted: p.predicted * (1 + (Math.random() - 0.5) * 0.05)
+        }));
+        mockResults.benchmark_test_data = benchmarkResults.test_data.map(p => ({
+          ...p,
+          predicted: p.predicted * (1 + (Math.random() - 0.5) * 0.08),
+          lower_bound: p.lower_bound * (1 + (Math.random() - 0.5) * 0.08),
+          upper_bound: p.upper_bound * (1 + (Math.random() - 0.5) * 0.08)
+        }));
+        mockResults.benchmark_forecast_data = benchmarkResults.forecast_data.map(p => ({
+          ...p,
+          predicted: p.predicted * (1 + (Math.random() - 0.5) * 0.1),
+          lower_bound: p.lower_bound * (1 + (Math.random() - 0.5) * 0.1),
+          upper_bound: p.upper_bound * (1 + (Math.random() - 0.5) * 0.1)
+        }));
+        
+        // Recalculate metrics for benchmark
+        const benchmarkActuals = mockResults.benchmark_test_data.map(t => t.actual!);
+        const benchmarkPredicted = mockResults.benchmark_test_data.map(t => t.predicted);
+        const benchmarkErrors = mockResults.benchmark_test_data.map((t, i) => t.actual! - t.predicted);
+        
+        const benchmarkMAE = benchmarkErrors.reduce((sum, e) => sum + Math.abs(e), 0) / benchmarkErrors.length;
+        const benchmarkMSE = benchmarkErrors.reduce((sum, e) => sum + e * e, 0) / benchmarkErrors.length;
+        const benchmarkRMSE = Math.sqrt(benchmarkMSE);
+        const benchmarkMAPE = benchmarkErrors.reduce((sum, e, i) => 
+          sum + Math.abs(e / benchmarkActuals[i]) * 100, 0) / benchmarkErrors.length;
+        
+        mockResults.benchmark_metrics = {
+          mae: benchmarkMAE,
+          mse: benchmarkMSE,
+          rmse: benchmarkRMSE,
+          mape: benchmarkMAPE,
+          ...mockResults.metrics
+        };
+      }
+      
       allResults.push(mockResults);
 
       console.log(`Completed forecast for segment: ${segment.segment}`, {

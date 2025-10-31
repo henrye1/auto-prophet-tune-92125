@@ -9,21 +9,62 @@ interface ResultsTableProps {
   trainingData: ForecastPoint[];
   testData: ForecastPoint[];
   forecastData: ForecastPoint[];
+  primaryModel?: string;
+  benchmarkModel?: string;
+  benchmarkTrainingData?: ForecastPoint[];
+  benchmarkTestData?: ForecastPoint[];
+  benchmarkForecastData?: ForecastPoint[];
 }
 
-export const ResultsTable = ({ segment, trainingData, testData, forecastData }: ResultsTableProps) => {
+export const ResultsTable = ({ 
+  segment, 
+  trainingData, 
+  testData, 
+  forecastData,
+  primaryModel,
+  benchmarkModel,
+  benchmarkTrainingData,
+  benchmarkTestData,
+  benchmarkForecastData
+}: ResultsTableProps) => {
   const allData = [...trainingData, ...testData, ...forecastData];
+  const hasBenchmark = benchmarkModel && benchmarkTestData && benchmarkForecastData;
 
   const exportToCSV = () => {
-    const headers = ["Date", "Actual", "Predicted", "Lower Bound", "Upper Bound", "Type"];
-    const rows = allData.map(point => [
-      point.date,
-      point.actual !== undefined ? point.actual.toFixed(4) : "",
-      point.predicted.toFixed(4),
-      point.lower_bound.toFixed(4),
-      point.upper_bound.toFixed(4),
-      point.is_test ? "Test" : point.is_forecast ? "Forecast" : "Training"
-    ]);
+    const headers = hasBenchmark
+      ? ["Date", "Actual", `${primaryModel}_Predicted`, `${primaryModel}_Lower`, `${primaryModel}_Upper`, `${benchmarkModel}_Predicted`, `${benchmarkModel}_Lower`, `${benchmarkModel}_Upper`, "Type"]
+      : ["Date", "Actual", "Predicted", "Lower Bound", "Upper Bound", "Type"];
+    
+    const rows = allData.map((point, idx) => {
+      const benchmarkPoint = hasBenchmark ? (
+        point.is_test 
+          ? benchmarkTestData[testData.findIndex(t => t.date === point.date)]
+          : point.is_forecast
+          ? benchmarkForecastData[forecastData.findIndex(f => f.date === point.date)]
+          : null
+      ) : null;
+
+      const baseRow = [
+        point.date,
+        point.actual !== undefined ? point.actual.toFixed(4) : "",
+        point.predicted.toFixed(4),
+        point.lower_bound.toFixed(4),
+        point.upper_bound.toFixed(4),
+      ];
+
+      if (hasBenchmark && benchmarkPoint) {
+        baseRow.push(
+          benchmarkPoint.predicted.toFixed(4),
+          benchmarkPoint.lower_bound.toFixed(4),
+          benchmarkPoint.upper_bound.toFixed(4)
+        );
+      } else if (hasBenchmark) {
+        baseRow.push("", "", "");
+      }
+
+      baseRow.push(point.is_test ? "Test" : point.is_forecast ? "Forecast" : "Training");
+      return baseRow;
+    });
 
     const csvContent = [
       headers.join(","),
@@ -45,7 +86,10 @@ export const ResultsTable = ({ segment, trainingData, testData, forecastData }: 
         <div className="flex items-center justify-between">
           <div>
             <CardTitle>Detailed Results Table</CardTitle>
-            <CardDescription>Complete forecast data for {segment}</CardDescription>
+            <CardDescription>
+              Complete forecast data for {segment}
+              {hasBenchmark && ` (includes ${benchmarkModel} benchmark)`}
+            </CardDescription>
           </div>
           <Button onClick={exportToCSV} variant="outline" size="sm">
             <Download className="mr-2 h-4 w-4" />

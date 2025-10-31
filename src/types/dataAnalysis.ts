@@ -47,4 +47,6 @@ export interface DataAnalysisResults {
   pacf?: PACFResult;
   transformations: DataTransformation[];
   ai_insights?: string;
+  recommended_model?: 'prophet' | 'autogluon' | 'arima' | 'ar' | 'arma';
+  model_rationale?: string;
 }

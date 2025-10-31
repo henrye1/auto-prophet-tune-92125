@@ -31,6 +31,8 @@ interface VariableState {
   status: VariableStatus;
   transformations: any[];
   aiRecommendations?: any;
+  recommendedModel?: string;
+  modelRationale?: string;
   stationarityTest?: any;
   acfData?: any;
   pacfData?: any;
@@ -408,10 +410,15 @@ export const DataAnalysisTools = ({
       {/* AI Analysis Button */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Wand2 className="h-5 w-5 text-primary" />
-            AI-Powered Transformation Analysis
-          </CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Wand2 className="h-5 w-5 text-primary" />
+                AI-Powered Transformation Analysis
+                {currentState.recommendedModel && (
+                  <Badge variant="outline" className="ml-2 bg-primary/10 border-primary/30">
+                    Recommended: {currentState.recommendedModel.toUpperCase()}
+                  </Badge>
+                )}
+              </CardTitle>
           <CardDescription>
             Automatically analyzes, transforms, and runs statistical tests (ADF, ACF, PACF{hasRegressors ? ', correlation' : ''}) on {hasRegressors ? 'all variables' : 'the dependent variable'} in parallel
           </CardDescription>
@@ -557,6 +564,21 @@ export const DataAnalysisTools = ({
                 <AlertDescription>
                   <p className="font-semibold mb-2">Transformation Strategy:</p>
                   <p className="text-sm mb-3">{currentState.aiRecommendations.rationale}</p>
+                  
+                  {currentState.modelRationale && (
+                    <>
+                      <Separator className="my-3" />
+                      <p className="font-semibold mb-2">Recommended Model:</p>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="default" className="text-sm">
+                          {currentState.recommendedModel?.toUpperCase()}
+                        </Badge>
+                      </div>
+                      <p className="text-sm">{currentState.modelRationale}</p>
+                    </>
+                  )}
+                  
+                  <Separator className="my-3" />
                   
                   <div className="space-y-3">
                     <div className="font-semibold text-sm">Applied Transformations:</div>
