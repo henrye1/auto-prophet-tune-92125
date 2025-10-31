@@ -991,17 +991,12 @@ const Index = () => {
 
           <TabsContent value="visualize" className="space-y-6">
             <DataVisualization
-              data={csvData
-                .filter(row => segments.length === 0 || segments.some(s => row[segmentColumn] === s.segmentValue))
-                .slice(0, 100)
-                .map((row) => ({
-                  date: row[dateColumn],
-                  segment: row[segmentColumn],
-                  [dependentVariable]: row[dependentVariable],
-                  ...row,
-                }))}
+              segments={segments}
+              segmentAnalysisStates={segmentAnalysisStates}
               dependentVariable={dependentVariable || 'value'}
-              regressors={availableRegressors.slice(0, 5)}
+              csvData={csvData}
+              dateColumn={dateColumn}
+              segmentColumn={segmentColumn}
             />
           </TabsContent>
 
