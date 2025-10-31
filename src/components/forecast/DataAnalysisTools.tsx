@@ -81,13 +81,37 @@ export const DataAnalysisTools = ({
   const getVariableDisplayName = (variable: string) => 
     variable === 'dependent' ? valueColumn : variable;
 
+  // Calculate linear regression trend line
+  const calculateTrendLine = (data: any[]) => {
+    const n = data.length;
+    if (n < 2) return data.map(d => ({ ...d, trend: d.value }));
+    
+    const xValues = data.map((_, i) => i);
+    const yValues = data.map(d => d.value);
+    
+    const sumX = xValues.reduce((a, b) => a + b, 0);
+    const sumY = yValues.reduce((a, b) => a + b, 0);
+    const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
+    const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
+    
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+    
+    return data.map((d, i) => ({
+      ...d,
+      trend: slope * i + intercept
+    }));
+  };
+
   // Prepare time series data for visualization
   const getTimeSeriesData = (variable: string) => {
     const column = variable === "dependent" ? valueColumn : variable;
-    return data.slice(0, 100).map(row => ({
+    const timeSeriesData = data.slice(0, 100).map(row => ({
       date: row[dateColumn],
       value: parseFloat(row[column]) || 0,
     })).filter(d => !isNaN(d.value));
+    
+    return calculateTrendLine(timeSeriesData);
   };
 
   // Run AI analysis on all variables
@@ -527,23 +551,147 @@ export const DataAnalysisTools = ({
           
           {/* AI Recommendations */}
           {currentState.aiRecommendations && (
-            <Alert>
-              <Wand2 className="h-4 w-4" />
-              <AlertDescription>
-                <p className="font-semibold mb-2">AI Recommendations:</p>
-                <p className="text-sm mb-2">{currentState.aiRecommendations.rationale}</p>
-                <div className="space-y-1">
-                  {currentState.aiRecommendations.recommendations.map((rec: any, i: number) => (
-                    <div key={i} className="text-sm flex items-start gap-2">
-                      <Badge variant="outline" className="mt-0.5">{i + 1}</Badge>
-                      <div>
-                        <span className="font-medium">{getTransformationInfo(rec.transform)?.name}:</span> {rec.reason}
+            <div className="space-y-3">
+              <Alert>
+                <Wand2 className="h-4 w-4" />
+                <AlertDescription>
+                  <p className="font-semibold mb-2">Transformation Strategy:</p>
+                  <p className="text-sm mb-3">{currentState.aiRecommendations.rationale}</p>
+                  
+                  <div className="space-y-3">
+                    <div className="font-semibold text-sm">Applied Transformations:</div>
+                    {currentState.aiRecommendations.recommendations.map((rec: any, i: number) => (
+                      <div key={i} className="bg-muted/50 p-3 rounded-md space-y-2">
+                        <div className="flex items-start gap-2">
+                          <Badge variant="outline" className="mt-0.5">{i + 1}</Badge>
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">
+                              {getTransformationInfo(rec.transform)?.name}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-sm pl-7">
+                          <div className="font-semibold text-xs text-muted-foreground mb-1">Why this transformation?</div>
+                          <div>{rec.reason}</div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </AlertDescription>
-            </Alert>
+                    ))}
+                  </div>
+                </AlertDescription>
+              </Alert>
+
+              {/* Data Observations */}
+              {(currentState.beforeStats || currentState.afterStats) && (
+                <Card className="bg-muted/30">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4" />
+                      Data Observations Supporting Transformations
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-xs">
+                    {currentState.beforeStats && (
+                      <div className="space-y-2">
+                        <div className="font-semibold">Before Transformation:</div>
+                        <div className="grid grid-cols-2 gap-2 pl-3">
+                          {currentState.beforeStats.adf && (
+                            <div>
+                              <span className="text-muted-foreground">ADF p-value:</span>{' '}
+                              <span className={currentState.beforeStats.adf.p_value > 0.05 ? 'text-destructive font-medium' : 'text-green-600 font-medium'}>
+                                {currentState.beforeStats.adf.p_value.toFixed(4)}
+                              </span>
+                              {currentState.beforeStats.adf.p_value > 0.05 && (
+                                <div className="text-[10px] text-muted-foreground mt-0.5">
+                                  → Non-stationary (needs transformation)
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {currentState.beforeStats.adf && (
+                            <div>
+                              <span className="text-muted-foreground">Test statistic:</span>{' '}
+                              <span className="font-medium">
+                                {currentState.beforeStats.adf.test_statistic.toFixed(3)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {currentState.beforeStats.acf && currentState.beforeStats.acf.correlations && (
+                          <div className="pl-3">
+                            <span className="text-muted-foreground">Autocorrelation pattern:</span>{' '}
+                            {(() => {
+                              const acf = currentState.beforeStats.acf.correlations.slice(1, 6);
+                              const avgCorr = acf.reduce((a: number, b: number) => a + Math.abs(b), 0) / acf.length;
+                              if (avgCorr > 0.5) {
+                                return <span className="text-destructive font-medium">Strong (avg: {avgCorr.toFixed(2)}) → Trend present</span>;
+                              } else if (avgCorr > 0.3) {
+                                return <span className="text-yellow-600 font-medium">Moderate (avg: {avgCorr.toFixed(2)}) → Some dependence</span>;
+                              } else {
+                                return <span className="text-green-600 font-medium">Weak (avg: {avgCorr.toFixed(2)}) → Low dependence</span>;
+                              }
+                            })()}
+                          </div>
+                        )}
+
+                        {selectedVariable !== 'dependent' && currentState.beforeStats.correlation !== undefined && (
+                          <div className="pl-3">
+                            <span className="text-muted-foreground">Correlation with dependent:</span>{' '}
+                            <span className={Math.abs(currentState.beforeStats.correlation) > 0.3 ? 'text-green-600 font-medium' : 'text-muted-foreground'}>
+                              {currentState.beforeStats.correlation.toFixed(3)}
+                            </span>
+                            {Math.abs(currentState.beforeStats.correlation) < 0.1 && (
+                              <span className="text-[10px] text-muted-foreground ml-1">
+                                → Weak relationship
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {currentState.afterStats && (
+                      <div className="space-y-2 pt-2 border-t">
+                        <div className="font-semibold">After Transformation:</div>
+                        <div className="grid grid-cols-2 gap-2 pl-3">
+                          {currentState.afterStats.adf && (
+                            <div>
+                              <span className="text-muted-foreground">ADF p-value:</span>{' '}
+                              <span className={currentState.afterStats.adf.p_value <= 0.05 ? 'text-green-600 font-medium' : 'text-destructive font-medium'}>
+                                {currentState.afterStats.adf.p_value.toFixed(4)}
+                              </span>
+                              {currentState.afterStats.adf.p_value <= 0.05 && (
+                                <div className="text-[10px] text-green-600 mt-0.5">
+                                  ✓ Now stationary!
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {currentState.afterStats.adf && (
+                            <div>
+                              <span className="text-muted-foreground">Test statistic:</span>{' '}
+                              <span className="font-medium">
+                                {currentState.afterStats.adf.test_statistic.toFixed(3)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {currentState.afterStats.adf && currentState.beforeStats?.adf && (
+                          <div className="pl-3 text-green-600 bg-green-500/10 p-2 rounded">
+                            <div className="font-semibold">Improvement:</div>
+                            <div className="text-[10px] mt-1">
+                              P-value reduced by {((1 - currentState.afterStats.adf.p_value / currentState.beforeStats.adf.p_value) * 100).toFixed(1)}%
+                              {currentState.afterStats.adf.is_stationary && ' → Achieved stationarity!'}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           )}
 
           {/* Time Series Visualization */}
@@ -568,6 +716,15 @@ export const DataAnalysisTools = ({
                       strokeWidth={2} 
                       dot={false} 
                     />
+                    <Line 
+                      type="monotone" 
+                      dataKey="trend" 
+                      name="Trend Line"
+                      stroke="hsl(var(--destructive))" 
+                      strokeWidth={2} 
+                      strokeDasharray="5 5"
+                      dot={false} 
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
@@ -575,24 +732,60 @@ export const DataAnalysisTools = ({
                   <div>
                     <h5 className="text-xs font-semibold mb-2 text-muted-foreground">Before</h5>
                     <ResponsiveContainer width="100%" height={150}>
-                      <LineChart data={currentState.beforeData}>
+                      <LineChart data={calculateTrendLine(currentState.beforeData || [])}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis dataKey="date" tick={{ fontSize: 9 }} />
                         <YAxis tick={{ fontSize: 9 }} />
                         <Tooltip />
-                        <Line type="monotone" dataKey="value" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} />
+                        <Legend />
+                        <Line 
+                          type="monotone" 
+                          dataKey="value" 
+                          name="Original"
+                          stroke="hsl(var(--destructive))" 
+                          strokeWidth={2} 
+                          dot={false} 
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="trend" 
+                          name="Trend"
+                          stroke="hsl(var(--destructive))" 
+                          strokeWidth={2} 
+                          strokeDasharray="5 5"
+                          dot={false}
+                          opacity={0.6}
+                        />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
                   <div>
                     <h5 className="text-xs font-semibold mb-2 text-muted-foreground">After Transformations</h5>
                     <ResponsiveContainer width="100%" height={150}>
-                      <LineChart data={currentState.afterData}>
+                      <LineChart data={calculateTrendLine(currentState.afterData || [])}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis dataKey="date" tick={{ fontSize: 9 }} />
                         <YAxis tick={{ fontSize: 9 }} />
                         <Tooltip />
-                        <Line type="monotone" dataKey="value" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
+                        <Legend />
+                        <Line 
+                          type="monotone" 
+                          dataKey="value" 
+                          name="Transformed"
+                          stroke="hsl(var(--chart-1))" 
+                          strokeWidth={2} 
+                          dot={false} 
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="trend" 
+                          name="Trend"
+                          stroke="hsl(var(--chart-1))" 
+                          strokeWidth={2} 
+                          strokeDasharray="5 5"
+                          dot={false}
+                          opacity={0.6}
+                        />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
