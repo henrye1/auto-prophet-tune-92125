@@ -1,10 +1,17 @@
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, ReferenceLine } from "recharts";
-import { TrendingUp, Target, Activity, Wand2 } from "lucide-react";
+import { TrendingUp, Target, Activity, Wand2, Download } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ResultsTable } from "./ResultsTable";
+import { toast } from "sonner";
+import html2canvas from "html2canvas";
 import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
 import type { PerformanceMetric } from "@/types/forecast";
 
@@ -25,6 +32,109 @@ const metricLabels: Record<PerformanceMetric, string> = {
 };
 
 export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsProps) => {
+  const [exportDialog, setExportDialog] = useState(false);
+  const [reportName, setReportName] = useState("");
+  const [exportFormat, setExportFormat] = useState<"csv" | "html" | "pdf">("pdf");
+
+  const openExport = (format: "csv" | "html" | "pdf") => {
+    setExportFormat(format);
+    setReportName(`Forecast_${new Date().toISOString().split('T')[0]}`);
+    setExportDialog(true);
+  };
+
+  const exportCSV = () => {
+    let csv = "Segment,Date,Actual,Predicted,Lower,Upper,Type\n";
+    results.segments.forEach(seg => {
+      [...seg.training_data.map(d => ({...d, type: 'Train'})),
+       ...seg.test_data.map(d => ({...d, type: 'Test'})),
+       ...seg.forecast_data.map(d => ({...d, type: 'Forecast'}))
+      ].forEach(row => {
+        csv += `${seg.segment},${row.date},${row.actual||''},${row.predicted},${row.lower_bound||''},${row.upper_bound||''},${row.type}\n`;
+      });
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${reportName}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("CSV downloaded");
+  };
+
+  const exportHTML = async () => {
+    toast.loading("Capturing charts...");
+    let html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>${reportName}</title>
+<style>
+  body{font-family:Arial;margin:40px;background:#fff}
+  h1{color:#333;border-bottom:3px solid #4f46e5;padding-bottom:10px}
+  h2{color:#4f46e5;margin-top:30px}
+  .meta{color:#666;margin-bottom:30px}
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin:20px 0}
+  .metric{padding:15px;background:#f9fafb;border-left:4px solid #4f46e5}
+  .metric-label{font-size:12px;color:#666}
+  .metric-value{font-size:24px;font-weight:bold}
+  .chart{margin:30px 0}
+  .chart img{max-width:100%;border:1px solid #e5e7eb}
+  .ai{background:#eff6ff;padding:20px;margin:20px 0;border-left:4px solid #3b82f6}
+  @media print{body{margin:20px}}
+</style></head><body>
+<h1>${reportName}</h1>
+<div class="meta"><p><strong>Model:</strong> ${results.model}</p>
+<p><strong>Generated:</strong> ${new Date(results.timestamp).toLocaleString()}</p></div>`;
+
+    for (const seg of results.segments) {
+      html += `<h2>${seg.segment}</h2>`;
+      if (seg.metrics) {
+        html += '<div class="metrics">';
+        selectedMetrics.forEach(m => {
+          const v = seg.metrics?.[m];
+          if (v !== undefined) {
+            const isPct = ['mape','coverage','smape','r2'].includes(m);
+            html += `<div class="metric"><div class="metric-label">${metricLabels[m]}</div>
+<div class="metric-value">${v.toFixed(m==='r2'?3:isPct?1:2)}${isPct&&m!=='r2'?'%':''}</div></div>`;
+          }
+        });
+        html += '</div>';
+      }
+      if (seg.ai_commentary) {
+        html += `<div class="ai"><strong>AI Analysis:</strong><br>${seg.ai_commentary.replace(/\n/g,'<br>')}</div>`;
+      }
+      const charts = document.querySelectorAll(`[data-seg="${seg.segment}"] .recharts-wrapper`);
+      for (let i = 0; i < charts.length; i++) {
+        const canvas = await html2canvas(charts[i] as HTMLElement, { backgroundColor: '#fff', scale: 2 });
+        html += `<div class="chart"><img src="${canvas.toDataURL('image/png')}"/></div>`;
+      }
+    }
+    html += '</body></html>';
+
+    if (exportFormat === 'html') {
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${reportName}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("HTML downloaded");
+    } else {
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.write(html);
+        w.document.close();
+        setTimeout(() => w.print(), 500);
+        toast.success("Print dialog opened");
+      }
+    }
+  };
+
+  const doExport = async () => {
+    setExportDialog(false);
+    if (exportFormat === 'csv') exportCSV();
+    else await exportHTML();
+  };
+
   if (!results || results.segments.length === 0) {
     return (
       <Card>
@@ -41,15 +151,47 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-primary" />
-            Forecast Results
-          </CardTitle>
-          <CardDescription>
-            Model: {results.model} | Generated: {new Date(results.timestamp).toLocaleString()}
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                Forecast Results
+              </CardTitle>
+              <CardDescription>
+                Model: {results.model} | Generated: {new Date(results.timestamp).toLocaleString()}
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => openExport('csv')}>
+                <Download className="h-4 w-4 mr-2" />CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => openExport('html')}>
+                <Download className="h-4 w-4 mr-2" />HTML
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => openExport('pdf')}>
+                <Download className="h-4 w-4 mr-2" />PDF
+              </Button>
+            </div>
+          </div>
         </CardHeader>
       </Card>
+
+      <Dialog open={exportDialog} onOpenChange={setExportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export Report</DialogTitle>
+            <DialogDescription>Name your report</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="name">Report Name</Label>
+            <Input id="name" value={reportName} onChange={(e) => setReportName(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportDialog(false)}>Cancel</Button>
+            <Button onClick={doExport}>Export {exportFormat.toUpperCase()}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Tabs defaultValue={results.segments[0]?.segment || "0"} className="space-y-4">
         <TabsList className="w-full overflow-x-auto flex-wrap h-auto">
@@ -61,7 +203,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
         </TabsList>
 
         {results.segments.map((segment, idx) => (
-          <TabsContent key={idx} value={segment.segment} className="space-y-6">
+          <TabsContent key={idx} value={segment.segment} className="space-y-6" data-seg={segment.segment}>
             {/* Metrics Card - Primary Model */}
             {segment.metrics && (
               <Card>
