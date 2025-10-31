@@ -55,6 +55,7 @@ Return a structured response explaining each parameter optimization.`;
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
+        temperature: 0.3,
         messages: [
           { role: "system", content: systemPrompt },
           { 

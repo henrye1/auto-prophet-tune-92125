@@ -84,6 +84,7 @@ Return transformation recommendations for each variable.`;
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
+        temperature: 0.3,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
