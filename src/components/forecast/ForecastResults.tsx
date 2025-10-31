@@ -148,13 +148,36 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                     <div className="w-3 h-3 rounded-full bg-purple-600 mr-2" />
                     Forecast
                   </Badge>
+                  {(segment.benchmark_test_data || segment.benchmark_forecast_data) && (
+                    <Badge variant="outline" className="bg-indigo-500/10 border-indigo-500/30">
+                      <div className="w-3 h-3 rounded-full bg-indigo-600 mr-2" />
+                      {segment.benchmark_model || 'Benchmark'}
+                    </Badge>
+                  )}
                   <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/30">
                     <div className="w-3 h-3 bg-emerald-600/40 mr-2" />
                     95% Confidence
                   </Badge>
                 </div>
                 <ResponsiveContainer width="100%" height={400}>
-                  <AreaChart data={[...segment.training_data, ...segment.test_data, ...segment.forecast_data]}>
+                  <AreaChart data={(() => {
+                    // Merge all data with benchmark predictions
+                    const allData = [...segment.training_data, ...segment.test_data, ...segment.forecast_data];
+                    return allData.map((point, idx) => {
+                      const testStartIdx = segment.training_data.length;
+                      const testEndIdx = testStartIdx + segment.test_data.length;
+                      const forecastStartIdx = testEndIdx;
+                      
+                      let benchmark_predicted = null;
+                      if (segment.benchmark_test_data && idx >= testStartIdx && idx < testEndIdx) {
+                        benchmark_predicted = segment.benchmark_test_data[idx - testStartIdx]?.predicted;
+                      } else if (segment.benchmark_forecast_data && idx >= forecastStartIdx) {
+                        benchmark_predicted = segment.benchmark_forecast_data[idx - forecastStartIdx]?.predicted;
+                      }
+                      
+                      return { ...point, benchmark_predicted };
+                    });
+                  })()}>
                     <defs>
                       <linearGradient id={`confidenceGradient-${segment.segment}`} x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="rgb(16, 185, 129)" stopOpacity={0.25} />
@@ -207,7 +230,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       strokeWidth={2.5}
                       dot={false}
                       name="Actual Data"
-                      connectNulls={false}
+                      connectNulls={true}
                     />
                     
                     {/* Test predictions (fitted) */}
@@ -219,7 +242,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       strokeDasharray="5 5"
                       dot={{ fill: 'rgb(249, 115, 22)', r: 4, strokeWidth: 2, stroke: '#fff' }}
                       name="Fitted (Test Period)"
-                      connectNulls={false}
+                      connectNulls={true}
                     />
                     
                     {/* Forecast */}
@@ -231,8 +254,22 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       strokeDasharray="8 4"
                       dot={{ fill: 'rgb(147, 51, 234)', r: 5, strokeWidth: 2, stroke: '#fff' }}
                       name="Forecast"
-                      connectNulls={false}
+                      connectNulls={true}
                     />
+                    
+                    {/* Benchmark Model predictions (if available) */}
+                    {(segment.benchmark_test_data || segment.benchmark_forecast_data) && (
+                      <Line
+                        type="monotone"
+                        dataKey="benchmark_predicted"
+                        stroke="rgb(99, 102, 241)"
+                        strokeWidth={2}
+                        strokeDasharray="3 3"
+                        dot={false}
+                        name={`${segment.benchmark_model || 'Benchmark'}`}
+                        connectNulls={true}
+                      />
+                    )}
                     
                     {/* Reference lines */}
                     {segment.test_data.length > 0 && (
