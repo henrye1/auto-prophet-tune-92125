@@ -91,69 +91,79 @@ const generateMockForecast = (
 
   // Calculate all requested metrics
   const metrics: any = {};
-  const actualValues = test.map(t => t.actual!);
-  const predictedValues = test.map(t => t.predicted);
-  const errors = test.map((t, i) => t.actual! - t.predicted);
   
-  console.log(`[Metrics Calculation] Segment: ${segment.segmentValue}`);
-  console.log(`[Metrics Calculation] Test data points: ${test.length}`);
-  console.log(`[Metrics Calculation] Selected metrics:`, selectedMetrics);
-  console.log(`[Metrics Calculation] Actual values sample:`, actualValues.slice(0, 3));
-  console.log(`[Metrics Calculation] Predicted values sample:`, predictedValues.slice(0, 3));
-  console.log(`[Metrics Calculation] Errors sample:`, errors.slice(0, 3));
-  
-  if (selectedMetrics.includes('mae')) {
-    metrics.mae = errors.reduce((sum, e) => sum + Math.abs(e), 0) / errors.length;
-    console.log(`[Metrics Calculation] MAE calculated:`, metrics.mae);
+  // Check if we have test data
+  if (test.length === 0) {
+    console.log(`[Metrics Calculation] Segment: ${segment.segmentValue} - No test data available`);
+    // Return undefined for all metrics when there's no test data
+    selectedMetrics.forEach(metric => {
+      metrics[metric] = undefined;
+    });
+  } else {
+    const actualValues = test.map(t => t.actual!);
+    const predictedValues = test.map(t => t.predicted);
+    const errors = test.map((t, i) => t.actual! - t.predicted);
+    
+    console.log(`[Metrics Calculation] Segment: ${segment.segmentValue}`);
+    console.log(`[Metrics Calculation] Test data points: ${test.length}`);
+    console.log(`[Metrics Calculation] Selected metrics:`, selectedMetrics);
+    console.log(`[Metrics Calculation] Actual values sample:`, actualValues.slice(0, 3));
+    console.log(`[Metrics Calculation] Predicted values sample:`, predictedValues.slice(0, 3));
+    console.log(`[Metrics Calculation] Errors sample:`, errors.slice(0, 3));
+    
+    if (selectedMetrics.includes('mae')) {
+      metrics.mae = errors.reduce((sum, e) => sum + Math.abs(e), 0) / errors.length;
+      console.log(`[Metrics Calculation] MAE calculated:`, metrics.mae);
+    }
+    if (selectedMetrics.includes('mse')) {
+      metrics.mse = errors.reduce((sum, e) => sum + e * e, 0) / errors.length;
+      console.log(`[Metrics Calculation] MSE calculated:`, metrics.mse);
+    }
+    if (selectedMetrics.includes('rmse')) {
+      metrics.rmse = Math.sqrt(errors.reduce((sum, e) => sum + e * e, 0) / errors.length);
+      console.log(`[Metrics Calculation] RMSE calculated:`, metrics.rmse);
+    }
+    if (selectedMetrics.includes('mape')) {
+      metrics.mape = errors.reduce((sum, e, i) => sum + Math.abs(e / actualValues[i]) * 100, 0) / errors.length;
+      console.log(`[Metrics Calculation] MAPE calculated:`, metrics.mape);
+    }
+    if (selectedMetrics.includes('smape')) {
+      metrics.smape = errors.reduce((sum, e, i) => {
+        const denominator = (Math.abs(actualValues[i]) + Math.abs(predictedValues[i])) / 2;
+        return sum + Math.abs(e) / denominator * 100;
+      }, 0) / errors.length;
+      console.log(`[Metrics Calculation] SMAPE calculated:`, metrics.smape);
+    }
+    if (selectedMetrics.includes('r2')) {
+      const mean = actualValues.reduce((s, v) => s + v, 0) / actualValues.length;
+      const ssRes = errors.reduce((s, e) => s + e * e, 0);
+      const ssTot = actualValues.reduce((s, v) => s + Math.pow(v - mean, 2), 0);
+      metrics.r2 = 1 - (ssRes / ssTot);
+      console.log(`[Metrics Calculation] R² calculated:`, metrics.r2);
+    }
+    if (selectedMetrics.includes('adj_r2')) {
+      const mean = actualValues.reduce((s, v) => s + v, 0) / actualValues.length;
+      const ssRes = errors.reduce((s, e) => s + e * e, 0);
+      const ssTot = actualValues.reduce((s, v) => s + Math.pow(v - mean, 2), 0);
+      const r2 = 1 - (ssRes / ssTot);
+      const n = actualValues.length;
+      const p = segment.regressors.length; // number of predictors
+      metrics.adj_r2 = 1 - ((1 - r2) * (n - 1) / (n - p - 1));
+      console.log(`[Metrics Calculation] Adjusted R² calculated:`, metrics.adj_r2);
+    }
+    if (selectedMetrics.includes('coverage')) {
+      metrics.coverage = test.filter(t => t.actual! >= t.lower_bound && t.actual! <= t.upper_bound).length / test.length * 100;
+      console.log(`[Metrics Calculation] Coverage calculated:`, metrics.coverage);
+    }
+    if (selectedMetrics.includes('mase')) {
+      const naiveErrors = actualValues.slice(1).map((v, i) => Math.abs(v - actualValues[i]));
+      const meanNaiveError = naiveErrors.reduce((s, e) => s + e, 0) / naiveErrors.length;
+      metrics.mase = (errors.reduce((s, e) => s + Math.abs(e), 0) / errors.length) / meanNaiveError;
+      console.log(`[Metrics Calculation] MASE calculated:`, metrics.mase);
+    }
+    
+    console.log(`[Metrics Calculation] Final metrics object:`, metrics);
   }
-  if (selectedMetrics.includes('mse')) {
-    metrics.mse = errors.reduce((sum, e) => sum + e * e, 0) / errors.length;
-    console.log(`[Metrics Calculation] MSE calculated:`, metrics.mse);
-  }
-  if (selectedMetrics.includes('rmse')) {
-    metrics.rmse = Math.sqrt(errors.reduce((sum, e) => sum + e * e, 0) / errors.length);
-    console.log(`[Metrics Calculation] RMSE calculated:`, metrics.rmse);
-  }
-  if (selectedMetrics.includes('mape')) {
-    metrics.mape = errors.reduce((sum, e, i) => sum + Math.abs(e / actualValues[i]) * 100, 0) / errors.length;
-    console.log(`[Metrics Calculation] MAPE calculated:`, metrics.mape);
-  }
-  if (selectedMetrics.includes('smape')) {
-    metrics.smape = errors.reduce((sum, e, i) => {
-      const denominator = (Math.abs(actualValues[i]) + Math.abs(predictedValues[i])) / 2;
-      return sum + Math.abs(e) / denominator * 100;
-    }, 0) / errors.length;
-    console.log(`[Metrics Calculation] SMAPE calculated:`, metrics.smape);
-  }
-  if (selectedMetrics.includes('r2')) {
-    const mean = actualValues.reduce((s, v) => s + v, 0) / actualValues.length;
-    const ssRes = errors.reduce((s, e) => s + e * e, 0);
-    const ssTot = actualValues.reduce((s, v) => s + Math.pow(v - mean, 2), 0);
-    metrics.r2 = 1 - (ssRes / ssTot);
-    console.log(`[Metrics Calculation] R² calculated:`, metrics.r2);
-  }
-  if (selectedMetrics.includes('adj_r2')) {
-    const mean = actualValues.reduce((s, v) => s + v, 0) / actualValues.length;
-    const ssRes = errors.reduce((s, e) => s + e * e, 0);
-    const ssTot = actualValues.reduce((s, v) => s + Math.pow(v - mean, 2), 0);
-    const r2 = 1 - (ssRes / ssTot);
-    const n = actualValues.length;
-    const p = segment.regressors.length; // number of predictors
-    metrics.adj_r2 = 1 - ((1 - r2) * (n - 1) / (n - p - 1));
-    console.log(`[Metrics Calculation] Adjusted R² calculated:`, metrics.adj_r2);
-  }
-  if (selectedMetrics.includes('coverage')) {
-    metrics.coverage = test.filter(t => t.actual! >= t.lower_bound && t.actual! <= t.upper_bound).length / test.length * 100;
-    console.log(`[Metrics Calculation] Coverage calculated:`, metrics.coverage);
-  }
-  if (selectedMetrics.includes('mase')) {
-    const naiveErrors = actualValues.slice(1).map((v, i) => Math.abs(v - actualValues[i]));
-    const meanNaiveError = naiveErrors.reduce((s, e) => s + e, 0) / naiveErrors.length;
-    metrics.mase = (errors.reduce((s, e) => s + Math.abs(e), 0) / errors.length) / meanNaiveError;
-    console.log(`[Metrics Calculation] MASE calculated:`, metrics.mase);
-  }
-  
-  console.log(`[Metrics Calculation] Final metrics object:`, metrics);
 
   // AI Commentary
   const ai_commentary = 

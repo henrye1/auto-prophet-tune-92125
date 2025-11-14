@@ -400,15 +400,20 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
               </Card>
             )}
 
-            {/* Combined Visualization */}
+            {/* Complete Time Series - Transformed Data */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Activity className="h-4 w-4" />
-                  Complete Time Series
+                  Complete Time Series: Transformed Data
+                  {segment.transformations_applied && (
+                    <Badge variant="secondary" className="ml-2">
+                      {segment.transformations_applied.join(', ')}
+                    </Badge>
+                  )}
                 </CardTitle>
                 <CardDescription>
-                  Training data, test predictions, and future forecast with confidence intervals
+                  Training data, test predictions, and future forecast with transformations applied
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -419,24 +424,12 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                   </Badge>
                   <Badge variant="outline" className="bg-orange-500/10 border-orange-500/30">
                     <div className="w-3 h-3 rounded-full bg-orange-600 mr-2" />
-                    Fitted (Test) - Transformed
+                    Fitted (Test)
                   </Badge>
                   <Badge variant="outline" className="bg-purple-500/10 border-purple-500/30">
                     <div className="w-3 h-3 rounded-full bg-purple-600 mr-2" />
-                    Forecast - Transformed
+                    Forecast
                   </Badge>
-                  {segment.raw_test_data && (
-                    <>
-                      <Badge variant="outline" className="bg-red-500/10 border-red-500/30">
-                        <div className="w-3 h-3 rounded-full bg-red-600 mr-2" />
-                        Fitted (Test) - Raw
-                      </Badge>
-                      <Badge variant="outline" className="bg-pink-500/10 border-pink-500/30">
-                        <div className="w-3 h-3 rounded-full bg-pink-600 mr-2" />
-                        Forecast - Raw
-                      </Badge>
-                    </>
-                  )}
                   {(segment.benchmark_test_data || segment.benchmark_forecast_data) && (
                     <Badge variant="outline" className="bg-indigo-500/10 border-indigo-500/30">
                       <div className="w-3 h-3 rounded-full bg-indigo-600 mr-2" />
