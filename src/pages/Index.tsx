@@ -17,7 +17,7 @@ import { ForecastProgress } from "@/components/forecast/ForecastProgress";
 import { ForecastResults } from "@/components/forecast/ForecastResults";
 import { PerformanceMetricSelector } from "@/components/forecast/PerformanceMetricSelector";
 import { DataAnalysisTools } from "@/components/forecast/DataAnalysisTools";
-import { SaveModelDialog } from "@/components/forecast/SaveModelDialog";
+// import { SaveModelDialog } from "@/components/forecast/SaveModelDialog";
 import { ModelDownload } from "@/components/forecast/ModelDownload";
 
 import { ChevronRight, Play, Save, LogOut, Library, Wand2, Loader2 } from "lucide-react";
@@ -229,74 +229,17 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  useEffect(() => {
-    // Load model if modelId is in URL
-    const modelId = searchParams.get("modelId");
-    if (modelId && isAuthenticated) {
-      loadModel(modelId);
-    }
-  }, [searchParams, isAuthenticated]);
+  // Temporarily disabled until database types sync
+  // useEffect(() => {
+  //   const modelId = searchParams.get("modelId");
+  //   if (modelId && isAuthenticated) {
+  //     loadModel(modelId);
+  //   }
+  // }, [searchParams, isAuthenticated]);
 
-  const loadModel = async (modelId: string) => {
-    const { data: model, error } = await supabase
-      .from("saved_models")
-      .select("*")
-      .eq("id", modelId)
-      .single();
-
-    if (error) {
-      toast.error("Failed to load model");
-      console.error(error);
-      return;
-    }
-
-    const { data: modelSegments, error: segmentsError } = await supabase
-      .from("model_segments")
-      .select("*")
-      .eq("model_id", modelId);
-
-    if (segmentsError) {
-      toast.error("Failed to load model segments");
-      console.error(segmentsError);
-      return;
-    }
-
-    setCurrentModelId(model.id);
-    setCurrentModelName(model.model_name);
-    setSelectedModel(model.model_type as ForecastModel);
-    setDateColumn(model.date_column);
-    setSegmentColumn(model.segment_column);
-    setDependentVariable(model.dependent_variable);
-    setSelectedMetrics((model.performance_metrics as any) || ['mae', 'rmse', 'mape', 'coverage']);
-    
-    // Restore CSV data and forecast results
-    if (model.csv_data) {
-      setCsvData(model.csv_data as any);
-      const columns = Object.keys((model.csv_data as any[])[0] || {});
-      setAvailableColumns(columns);
-    }
-    
-    if (model.forecast_results) {
-      setForecastResults(model.forecast_results as any);
-    }
-    
-    const loadedSegments: SegmentConfig[] = modelSegments.map((ms: any) => ({
-      segment: ms.segment,
-      segmentValue: ms.segment_value,
-      regressors: ms.regressors || [],
-      forecast_periods: ms.forecast_periods,
-      frequency: ms.frequency,
-      total_records: ms.total_records,
-      training_records: ms.training_records,
-      test_records: ms.test_records,
-      prophet_params: ms.prophet_params,
-      autogluon_params: ms.autogluon_params,
-      traditional_params: ms.traditional_params,
-    }));
-    
-    setSegments(loadedSegments);
-    toast.success(`Model "${model.model_name}" loaded successfully`);
-  };
+  // const loadModel = async (modelId: string) => {
+  //   toast.info("Model loading temporarily disabled");
+  // };
 
   // Run analysis on all segments simultaneously
   const handleRunAllSegmentsAnalysis = async () => {
@@ -817,14 +760,15 @@ const Index = () => {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => navigate("/models")}>
+              {/* Temporarily disabled until database types sync */}
+              {/* <Button variant="outline" onClick={() => navigate("/models")}>
                 <Library className="mr-2 h-4 w-4" />
                 My Models
               </Button>
               <Button variant="outline" onClick={handleSaveModel}>
                 <Save className="mr-2 h-4 w-4" />
                 {currentModelId ? "Update Model" : "Save Model"}
-              </Button>
+              </Button> */}
               <Button variant="outline" onClick={handleSignOut}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign Out
@@ -1120,7 +1064,8 @@ const Index = () => {
           </TabsContent>
         </Tabs>
 
-        <SaveModelDialog
+        {/* Temporarily disabled until database types sync */}
+        {/* <SaveModelDialog
           open={saveDialogOpen}
           onOpenChange={setSaveDialogOpen}
           config={getCurrentConfig()}
@@ -1128,7 +1073,7 @@ const Index = () => {
           existingModelName={currentModelName}
           csvData={csvData}
           forecastResults={forecastResults}
-        />
+        /> */}
       </div>
     </div>
   );
