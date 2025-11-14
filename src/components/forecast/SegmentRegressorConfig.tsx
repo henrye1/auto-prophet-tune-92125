@@ -4,19 +4,29 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RegressorConfig } from "./RegressorConfig";
 import { Target } from "lucide-react";
+import { getNumericColumns } from "@/utils/dataAnalysis";
 import type { SegmentConfig } from "@/types/forecast";
 
 interface SegmentRegressorConfigProps {
   segments: SegmentConfig[];
   availableRegressors: string[];
   onSegmentsChange: (segments: SegmentConfig[]) => void;
+  data?: any[];
 }
 
 export const SegmentRegressorConfig = ({
   segments,
   availableRegressors,
   onSegmentsChange,
+  data,
 }: SegmentRegressorConfigProps) => {
+  // Filter to only numeric columns
+  const numericRegressors = data 
+    ? getNumericColumns(data, availableRegressors)
+    : availableRegressors;
+  
+  const nonNumericCount = availableRegressors.length - numericRegressors.length;
+  
   const updateSegmentRegressors = (segmentName: string, regressors: any[]) => {
     onSegmentsChange(
       segments.map((s) => (s.segment === segmentName ? { ...s, regressors } : s))
@@ -68,11 +78,12 @@ export const SegmentRegressorConfig = ({
           {segments.map((segment) => (
             <TabsContent key={segment.segment} value={segment.segment} className="mt-6">
               <RegressorConfig
-                availableRegressors={availableRegressors}
+                availableRegressors={numericRegressors}
                 selectedRegressors={segment.regressors}
                 onRegressorsChange={(regressors) =>
                   updateSegmentRegressors(segment.segment, regressors)
                 }
+                nonNumericCount={nonNumericCount}
               />
             </TabsContent>
           ))}

@@ -1,4 +1,34 @@
 /**
+ * Check if a column contains numeric data
+ */
+export const isNumericColumn = (data: any[], columnName: string): boolean => {
+  if (!data || data.length === 0) return false;
+  
+  // Sample first 50 rows for performance
+  const sample = data.slice(0, 50);
+  const numericCount = sample.filter(row => {
+    const value = row[columnName];
+    if (value === null || value === undefined || value === '') return false;
+    
+    // Remove common non-numeric characters like %, $, commas
+    const cleanValue = String(value).replace(/[$,%,]/g, '');
+    const parsed = parseFloat(cleanValue);
+    
+    return !isNaN(parsed) && isFinite(parsed);
+  }).length;
+  
+  // Consider numeric if >80% of sampled values are numeric
+  return numericCount / sample.length > 0.8;
+};
+
+/**
+ * Get only numeric columns from data
+ */
+export const getNumericColumns = (data: any[], columns: string[]): string[] => {
+  return columns.filter(col => isNumericColumn(data, col));
+};
+
+/**
  * Analyze time series data for a segment
  */
 export const analyzeSegmentData = (

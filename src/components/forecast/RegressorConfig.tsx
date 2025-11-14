@@ -6,19 +6,22 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Plus, X, Settings2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Plus, X, Settings2, AlertCircle } from "lucide-react";
 import type { Regressor } from "@/types/forecast";
 
 interface RegressorConfigProps {
   availableRegressors: string[];
   selectedRegressors: Regressor[];
   onRegressorsChange: (regressors: Regressor[]) => void;
+  nonNumericCount?: number;
 }
 
 export const RegressorConfig = ({
   availableRegressors,
   selectedRegressors,
   onRegressorsChange,
+  nonNumericCount = 0,
 }: RegressorConfigProps) => {
   const [newRegressor, setNewRegressor] = useState("");
 
@@ -58,6 +61,15 @@ export const RegressorConfig = ({
         <CardDescription>Select and configure drivers for your forecast</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {nonNumericCount > 0 && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="text-sm">
+              {nonNumericCount} non-numeric column{nonNumericCount > 1 ? 's' : ''} hidden. Only numeric variables can be used for statistical analysis.
+            </AlertDescription>
+          </Alert>
+        )}
+        
         <div className="flex gap-2">
           <Select value={newRegressor} onValueChange={setNewRegressor}>
             <SelectTrigger className="flex-1">

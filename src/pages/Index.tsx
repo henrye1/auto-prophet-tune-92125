@@ -967,6 +967,7 @@ const Index = () => {
               segments={segments}
               availableRegressors={availableRegressors}
               onSegmentsChange={setSegments}
+              data={csvData}
             />
             <div className="flex justify-end">
               <Button onClick={() => setActiveTab("metrics")}>
