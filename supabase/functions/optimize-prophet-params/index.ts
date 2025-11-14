@@ -12,36 +12,90 @@ serve(async (req) => {
   }
 
   try {
-    const { segmentData, dateColumn, valueColumn, currentParams } = await req.json();
+    const { segmentData, dateColumn, valueColumn, currentParams, frequency } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    // Analyze data patterns
-    const dataAnalysis = {
-      recordCount: segmentData.length,
-      hasYearlySeason: segmentData.length >= 730,
-      hasWeeklySeason: segmentData.length >= 14,
-      hasDailySeason: segmentData.length >= 3,
+    // Determine appropriate seasonality based on data frequency
+    const freq = frequency?.toLowerCase() || 'unknown';
+    const isDaily = ['d', 'daily', 'day'].some(f => freq.includes(f));
+    const isWeekly = ['w', 'weekly', 'week'].some(f => freq.includes(f));
+    const isMonthly = ['m', 'monthly', 'month', 'ms', 'me'].some(f => freq.includes(f));
+    const isQuarterly = ['q', 'quarterly', 'quarter'].some(f => freq.includes(f));
+    const isYearly = ['y', 'yearly', 'year', 'a', 'annual'].some(f => freq.includes(f));
+
+    // Determine which seasonalities make sense for this frequency
+    let appropriateSeasonalities = {
+      yearly: false,
+      weekly: false,
+      daily: false,
     };
+
+    if (isDaily) {
+      appropriateSeasonalities = {
+        yearly: segmentData.length >= 365 * 2,
+        weekly: segmentData.length >= 14,
+        daily: false, // Daily data doesn't have sub-daily patterns
+      };
+    } else if (isWeekly) {
+      appropriateSeasonalities = {
+        yearly: segmentData.length >= 52 * 2,
+        weekly: false, // Weekly data doesn't have sub-weekly patterns
+        daily: false,
+      };
+    } else if (isMonthly) {
+      appropriateSeasonalities = {
+        yearly: segmentData.length >= 24, // At least 2 years
+        weekly: false, // Monthly data cannot capture weekly patterns
+        daily: false,  // Monthly data cannot capture daily patterns
+      };
+    } else if (isQuarterly) {
+      appropriateSeasonalities = {
+        yearly: segmentData.length >= 8, // At least 2 years
+        weekly: false,
+        daily: false,
+      };
+    } else if (isYearly) {
+      appropriateSeasonalities = {
+        yearly: false, // Yearly data doesn't have sub-yearly patterns
+        weekly: false,
+        daily: false,
+      };
+    } else {
+      // Unknown frequency - be conservative
+      appropriateSeasonalities = {
+        yearly: segmentData.length >= 730,
+        weekly: segmentData.length >= 14,
+        daily: segmentData.length >= 3,
+      };
+    }
 
     const systemPrompt = `You are a time series forecasting expert specializing in Prophet model optimization.
 Analyze the provided data characteristics and current parameters, then suggest optimal Prophet hyperparameters.
 
 Data characteristics:
-- Total records: ${dataAnalysis.recordCount}
+- Total records: ${segmentData.length}
+- Data frequency: ${frequency || 'unknown'}
 - Date column: ${dateColumn}
 - Value column: ${valueColumn}
-- Has yearly seasonality data: ${dataAnalysis.hasYearlySeason}
-- Has weekly seasonality data: ${dataAnalysis.hasWeeklySeason}
-- Has daily seasonality data: ${dataAnalysis.hasDailySeason}
+
+IMPORTANT SEASONALITY CONSTRAINTS based on data frequency:
+- Yearly seasonality should be: ${appropriateSeasonalities.yearly ? 'ENABLED (true or integer Fourier terms)' : 'DISABLED (false) - not enough data or frequency too coarse'}
+- Weekly seasonality should be: ${appropriateSeasonalities.weekly ? 'ENABLED (true or integer Fourier terms)' : 'DISABLED (false) - data frequency is too coarse to capture weekly patterns'}
+- Daily seasonality should be: ${appropriateSeasonalities.daily ? 'ENABLED (true or integer Fourier terms)' : 'DISABLED (false) - data frequency is too coarse to capture daily patterns'}
+
+CRITICAL: You MUST set seasonality to false when the data frequency is too coarse. For example:
+- Monthly data CANNOT have weekly or daily seasonality (will cause overfitting)
+- Quarterly data CANNOT have monthly, weekly, or daily seasonality
+- Weekly data CANNOT have daily seasonality
 
 Provide optimized parameters with explanations for each setting. Focus on:
 1. Growth model selection (linear vs logistic)
 2. Changepoint sensitivity
-3. Seasonality settings
+3. Seasonality settings (respecting frequency constraints above)
 4. Cross-validation parameters
 5. Confidence intervals
 
