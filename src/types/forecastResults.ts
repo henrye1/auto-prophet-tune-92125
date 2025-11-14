@@ -20,12 +20,30 @@ export interface SegmentForecastResult {
     mape?: number;
     mse?: number;
     r2?: number;
+    adj_r2?: number;
     coverage?: number;
     smape?: number;
     mase?: number;
   };
   ai_commentary?: string;
   model?: string;
+  transformations_applied?: string[];
+  // Raw data results (without transformations)
+  raw_training_data?: ForecastPoint[];
+  raw_test_data?: ForecastPoint[];
+  raw_forecast_data?: ForecastPoint[];
+  raw_metrics?: {
+    mae?: number;
+    rmse?: number;
+    mape?: number;
+    mse?: number;
+    r2?: number;
+    adj_r2?: number;
+    coverage?: number;
+    smape?: number;
+    mase?: number;
+  };
+  // Benchmark model
   benchmark_model?: string;
   benchmark_training_data?: ForecastPoint[];
   benchmark_test_data?: ForecastPoint[];
@@ -36,6 +54,7 @@ export interface SegmentForecastResult {
     mape?: number;
     mse?: number;
     r2?: number;
+    adj_r2?: number;
     coverage?: number;
     smape?: number;
     mase?: number;

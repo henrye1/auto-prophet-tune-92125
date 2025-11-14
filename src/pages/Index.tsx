@@ -538,15 +538,38 @@ const Index = () => {
       const segment = segments[i];
       
       // Filter and sort data for this segment
-      const segmentData = csvData
+      const rawSegmentData = csvData
         .filter(row => row[segmentColumn] === segment.segmentValue)
         .sort((a, b) => new Date(a[dateColumn]).getTime() - new Date(b[dateColumn]).getTime());
       
-      const trainingData = segmentData.slice(0, segment.training_records);
-      const testData = segmentData.slice(segment.training_records, segment.training_records + segment.test_records);
+      // Get analysis state and apply transformations if available
+      const analysisState = segmentAnalysisStates[segment.segmentValue];
+      let transformedSegmentData = rawSegmentData;
+      let transformationsSummary: string[] = [];
+      let hasTransformations = false;
+      
+      if (analysisState && Object.keys(analysisState).length > 0) {
+        const { applyAnalysisTransformations } = await import('@/utils/dataAnalysis');
+        const result = applyAnalysisTransformations(
+          JSON.parse(JSON.stringify(rawSegmentData)), // Deep clone
+          dateColumn,
+          dependentVariable,
+          segment.regressors.map(r => r.name),
+          analysisState
+        );
+        transformedSegmentData = result.transformedData;
+        transformationsSummary = result.transformationsSummary;
+        hasTransformations = transformationsSummary.length > 0;
+      }
+      
+      // Prepare both raw and transformed datasets
+      const rawTrainingData = rawSegmentData.slice(0, segment.training_records);
+      const rawTestData = rawSegmentData.slice(segment.training_records, segment.training_records + segment.test_records);
+      
+      const transformedTrainingData = transformedSegmentData.slice(0, segment.training_records);
+      const transformedTestData = transformedSegmentData.slice(segment.training_records, segment.training_records + segment.test_records);
       
       // Get recommended model from analysis if available
-      const analysisState = segmentAnalysisStates[segment.segmentValue];
       const recommendedModel = analysisState?.dependent?.recommendedModel;
       const shouldRunBenchmark = recommendedModel && recommendedModel !== selectedModel;
       
@@ -557,7 +580,7 @@ const Index = () => {
             ...p, 
             status: 'running', 
             progress: 0, 
-            message: `Using ${trainingData.length} records for training, ${testData.length} for testing${shouldRunBenchmark ? ` + benchmark (${recommendedModel})` : ''}` 
+            message: `Using ${transformedTrainingData.length} records for training, ${transformedTestData.length} for testing${hasTransformations ? ' (with transformations)' : ''}${shouldRunBenchmark ? ` + benchmark (${recommendedModel})` : ''}` 
           } : p
         )
       );
@@ -567,25 +590,27 @@ const Index = () => {
       // Simulate model training stages
       const stages = shouldRunBenchmark 
         ? [
-            { progress: 12, message: `Training ${selectedModel} on ${trainingData.length} records...` },
-            { progress: 25, message: `Validating ${selectedModel} on ${testData.length} test records...` },
-            { progress: 37, message: `${selectedModel} cross-validation...` },
-            { progress: 50, message: `${selectedModel} forecasting ${segment.forecast_periods} periods...` },
-            { progress: 62, message: `Training benchmark ${recommendedModel}...` },
-            { progress: 75, message: `Validating benchmark ${recommendedModel}...` },
-            { progress: 87, message: `${recommendedModel} cross-validation...` },
+            { progress: 10, message: hasTransformations ? `Applying transformations...` : `Preparing data...` },
+            { progress: 18, message: `Training ${selectedModel} (transformed) on ${transformedTrainingData.length} records...` },
+            { progress: 28, message: `Validating ${selectedModel} (transformed) on ${transformedTestData.length} test records...` },
+            { progress: 38, message: `Forecasting ${segment.forecast_periods} periods (transformed)...` },
+            { progress: 50, message: hasTransformations ? `Training ${selectedModel} (raw data)...` : `Computing metrics...` },
+            { progress: 60, message: hasTransformations ? `Validating ${selectedModel} (raw data)...` : `Preparing benchmark...` },
+            { progress: 70, message: `Training benchmark ${recommendedModel}...` },
+            { progress: 85, message: `Validating benchmark ${recommendedModel}...` },
             { progress: 100, message: 'Complete' },
           ]
         : [
-            { progress: 25, message: `Training on ${trainingData.length} records...` },
-            { progress: 50, message: `Validating on ${testData.length} test records...` },
-            { progress: 75, message: 'Cross-validation...' },
+            { progress: 15, message: hasTransformations ? `Applying transformations...` : `Preparing data...` },
+            { progress: 35, message: `Training on ${transformedTrainingData.length} records (transformed)...` },
+            { progress: 55, message: `Validating on ${transformedTestData.length} test records (transformed)...` },
+            { progress: 75, message: hasTransformations ? `Running forecast on raw data for comparison...` : `Forecasting...` },
             { progress: 90, message: `Forecasting ${segment.forecast_periods} periods...` },
             { progress: 100, message: 'Complete' },
           ];
 
       for (const stage of stages) {
-        await new Promise(resolve => setTimeout(resolve, shouldRunBenchmark ? 600 : 800));
+        await new Promise(resolve => setTimeout(resolve, shouldRunBenchmark ? 500 : 600));
         setSegmentProgress(prev =>
           prev.map((p, idx) =>
             idx === i ? { ...p, progress: stage.progress, message: stage.message } : p
@@ -600,8 +625,7 @@ const Index = () => {
         )
       );
 
-      // Generate mock forecast results
-      // Use segment's prophet_params or fallback to reasonable defaults
+      // Generate forecast results with TRANSFORMED data (primary)
       const prophetParams = segment.prophet_params || {
         growth: 'linear' as const,
         changepoint_prior_scale: 0.05,
@@ -621,8 +645,8 @@ const Index = () => {
       };
       
       const mockResults = generateMockForecast(
-        trainingData,
-        testData,
+        transformedTrainingData,
+        transformedTestData,
         segment,
         dateColumn,
         dependentVariable,
@@ -630,12 +654,31 @@ const Index = () => {
         selectedMetrics
       ) as any;
       mockResults.model = selectedModel;
+      mockResults.transformations_applied = transformationsSummary;
+
+      // Generate forecast results with RAW data (for comparison)
+      if (hasTransformations) {
+        const rawResults = generateMockForecast(
+          rawTrainingData,
+          rawTestData,
+          segment,
+          dateColumn,
+          dependentVariable,
+          prophetParams,
+          selectedMetrics
+        );
+        
+        mockResults.raw_training_data = rawResults.training_data;
+        mockResults.raw_test_data = rawResults.test_data;
+        mockResults.raw_forecast_data = rawResults.forecast_data;
+        mockResults.raw_metrics = rawResults.metrics;
+      }
 
       // Run benchmark model if recommended and different from selected
       if (shouldRunBenchmark) {
         const benchmarkResults = generateMockForecast(
-          trainingData,
-          testData,
+          transformedTrainingData,
+          transformedTestData,
           segment,
           dateColumn,
           dependentVariable,
@@ -725,11 +768,13 @@ const Index = () => {
       console.log(`Completed forecast for segment: ${segment.segment}`, {
         model: selectedModel,
         segmentValue: segment.segmentValue,
-        totalRecords: segmentData.length,
-        trainingRecords: trainingData.length,
-        testRecords: testData.length,
+        totalRecords: transformedSegmentData.length,
+        trainingRecords: transformedTrainingData.length,
+        testRecords: transformedTestData.length,
         forecastPeriods: segment.forecast_periods,
         frequency: segment.frequency,
+        hasTransformations,
+        transformationsSummary,
         config: segment,
         parameters: selectedModel === 'prophet' ? (segment.prophet_params || null) : null,
       });

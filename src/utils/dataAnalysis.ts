@@ -144,6 +144,56 @@ export const applyTransformationChain = (
 };
 
 /**
+ * Apply transformations from analysis state to CSV data
+ */
+export const applyAnalysisTransformations = (
+  data: any[],
+  dateColumn: string,
+  dependentVariable: string,
+  regressors: string[],
+  analysisState: Record<string, any>
+): { transformedData: any[]; transformationsSummary: string[] } => {
+  const transformedData = [...data];
+  const transformationsSummary: string[] = [];
+
+  // Apply transformations to dependent variable
+  if (analysisState?.dependent?.transformations && analysisState.dependent.transformations.length > 0) {
+    const depTransforms = analysisState.dependent.transformations;
+    const depValues = data.map(row => parseFloat(row[dependentVariable]));
+    const transformedDepValues = applyTransformationChain(depValues, depTransforms);
+    
+    transformedData.forEach((row, i) => {
+      row[dependentVariable] = transformedDepValues[i];
+    });
+    
+    const transformNames = depTransforms.map((t: any) => t.type).filter((t: string) => t !== 'none').join(' → ');
+    if (transformNames) {
+      transformationsSummary.push(`${dependentVariable}: ${transformNames}`);
+    }
+  }
+
+  // Apply transformations to regressors
+  regressors.forEach(regressor => {
+    if (analysisState?.[regressor]?.transformations && analysisState[regressor].transformations.length > 0) {
+      const regTransforms = analysisState[regressor].transformations;
+      const regValues = data.map(row => parseFloat(row[regressor]));
+      const transformedRegValues = applyTransformationChain(regValues, regTransforms);
+      
+      transformedData.forEach((row, i) => {
+        row[regressor] = transformedRegValues[i];
+      });
+      
+      const transformNames = regTransforms.map((t: any) => t.type).filter((t: string) => t !== 'none').join(' → ');
+      if (transformNames) {
+        transformationsSummary.push(`${regressor}: ${transformNames}`);
+      }
+    }
+  });
+
+  return { transformedData, transformationsSummary };
+};
+
+/**
  * Get transformation information
  */
 export const getTransformationInfo = (type: string) => {
