@@ -92,9 +92,9 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
         selectedMetrics.forEach(m => {
           const v = seg.metrics?.[m];
           if (v !== undefined) {
-            const isPct = ['mape','coverage','smape','r2'].includes(m);
+            const isPct = ['mape','coverage','smape','r2','adj_r2'].includes(m);
             html += `<div class="metric"><div class="metric-label">${metricLabels[m]}</div>
-<div class="metric-value">${v.toFixed(m==='r2'?3:isPct?1:2)}${isPct&&m!=='r2'?'%':''}</div></div>`;
+<div class="metric-value">${v.toFixed(['r2','adj_r2'].includes(m)?3:isPct?1:2)}${isPct&&!['r2','adj_r2'].includes(m)?'%':''}</div></div>`;
           }
         });
         html += '</div>';
@@ -226,7 +226,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       const benchmarkValue = segment.benchmark_metrics?.[metric];
                       if (value === undefined) return null;
                       
-                      const isPercentage = ['mape', 'coverage', 'smape', 'r2'].includes(metric);
+                      const isPercentage = ['mape', 'coverage', 'smape', 'r2', 'adj_r2'].includes(metric);
                       const isBetter = benchmarkValue !== undefined && (
                         ['mae', 'rmse', 'mse', 'mape', 'smape', 'mase'].includes(metric) 
                           ? value < benchmarkValue 
@@ -238,13 +238,13 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                           <p className="text-xs text-muted-foreground">{metricLabels[metric]}</p>
                           <div className="flex items-baseline gap-2">
                             <p className={`text-2xl font-bold ${isBetter ? 'text-green-600' : ''}`}>
-                              {value.toFixed(metric === 'r2' ? 3 : isPercentage ? 1 : 2)}
-                              {isPercentage && metric !== 'r2' ? '%' : ''}
+                              {value.toFixed(['r2', 'adj_r2'].includes(metric) ? 3 : isPercentage ? 1 : 2)}
+                              {isPercentage && !['r2', 'adj_r2'].includes(metric) ? '%' : ''}
                             </p>
                             {benchmarkValue !== undefined && (
                               <p className="text-sm text-muted-foreground">
-                                vs {benchmarkValue.toFixed(metric === 'r2' ? 3 : isPercentage ? 1 : 2)}
-                                {isPercentage && metric !== 'r2' ? '%' : ''}
+                                vs {benchmarkValue.toFixed(['r2', 'adj_r2'].includes(metric) ? 3 : isPercentage ? 1 : 2)}
+                                {isPercentage && !['r2', 'adj_r2'].includes(metric) ? '%' : ''}
                               </p>
                             )}
                           </div>

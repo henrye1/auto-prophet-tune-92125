@@ -132,6 +132,16 @@ const generateMockForecast = (
     metrics.r2 = 1 - (ssRes / ssTot);
     console.log(`[Metrics Calculation] R² calculated:`, metrics.r2);
   }
+  if (selectedMetrics.includes('adj_r2')) {
+    const mean = actualValues.reduce((s, v) => s + v, 0) / actualValues.length;
+    const ssRes = errors.reduce((s, e) => s + e * e, 0);
+    const ssTot = actualValues.reduce((s, v) => s + Math.pow(v - mean, 2), 0);
+    const r2 = 1 - (ssRes / ssTot);
+    const n = actualValues.length;
+    const p = segment.regressors.length; // number of predictors
+    metrics.adj_r2 = 1 - ((1 - r2) * (n - 1) / (n - p - 1));
+    console.log(`[Metrics Calculation] Adjusted R² calculated:`, metrics.adj_r2);
+  }
   if (selectedMetrics.includes('coverage')) {
     metrics.coverage = test.filter(t => t.actual! >= t.lower_bound && t.actual! <= t.upper_bound).length / test.length * 100;
     console.log(`[Metrics Calculation] Coverage calculated:`, metrics.coverage);
@@ -447,10 +457,6 @@ const Index = () => {
   };
 
   const handleSaveModel = () => {
-    if (segments.length === 0) {
-      toast.error("Please configure at least one segment before saving");
-      return;
-    }
     setSaveDialogOpen(true);
   };
 
@@ -667,13 +673,51 @@ const Index = () => {
         const benchmarkMAPE = benchmarkErrors.reduce((sum, e, i) => 
           sum + Math.abs(e / benchmarkActuals[i]) * 100, 0) / benchmarkErrors.length;
         
-        mockResults.benchmark_metrics = {
-          mae: benchmarkMAE,
-          mse: benchmarkMSE,
-          rmse: benchmarkRMSE,
-          mape: benchmarkMAPE,
-          ...mockResults.metrics
-        };
+        // Calculate all selected metrics for benchmark
+        const benchmarkMetrics: any = {};
+        
+        if (selectedMetrics.includes('mae')) benchmarkMetrics.mae = benchmarkMAE;
+        if (selectedMetrics.includes('mse')) benchmarkMetrics.mse = benchmarkMSE;
+        if (selectedMetrics.includes('rmse')) benchmarkMetrics.rmse = benchmarkRMSE;
+        if (selectedMetrics.includes('mape')) benchmarkMetrics.mape = benchmarkMAPE;
+        
+        if (selectedMetrics.includes('smape')) {
+          benchmarkMetrics.smape = benchmarkErrors.reduce((sum, e, i) => {
+            const denominator = (Math.abs(benchmarkActuals[i]) + Math.abs(benchmarkPredicted[i])) / 2;
+            return sum + Math.abs(e) / denominator * 100;
+          }, 0) / benchmarkErrors.length;
+        }
+        
+        if (selectedMetrics.includes('r2')) {
+          const mean = benchmarkActuals.reduce((s, v) => s + v, 0) / benchmarkActuals.length;
+          const ssRes = benchmarkErrors.reduce((s, e) => s + e * e, 0);
+          const ssTot = benchmarkActuals.reduce((s, v) => s + Math.pow(v - mean, 2), 0);
+          benchmarkMetrics.r2 = 1 - (ssRes / ssTot);
+        }
+        
+        if (selectedMetrics.includes('adj_r2')) {
+          const mean = benchmarkActuals.reduce((s, v) => s + v, 0) / benchmarkActuals.length;
+          const ssRes = benchmarkErrors.reduce((s, e) => s + e * e, 0);
+          const ssTot = benchmarkActuals.reduce((s, v) => s + Math.pow(v - mean, 2), 0);
+          const r2 = 1 - (ssRes / ssTot);
+          const n = benchmarkActuals.length;
+          const p = segment.regressors.length;
+          benchmarkMetrics.adj_r2 = 1 - ((1 - r2) * (n - 1) / (n - p - 1));
+        }
+        
+        if (selectedMetrics.includes('coverage')) {
+          benchmarkMetrics.coverage = mockResults.benchmark_test_data.filter(
+            t => t.actual! >= t.lower_bound && t.actual! <= t.upper_bound
+          ).length / mockResults.benchmark_test_data.length * 100;
+        }
+        
+        if (selectedMetrics.includes('mase')) {
+          const naiveErrors = benchmarkActuals.slice(1).map((v, i) => Math.abs(v - benchmarkActuals[i]));
+          const meanNaiveError = naiveErrors.reduce((s, e) => s + e, 0) / naiveErrors.length;
+          benchmarkMetrics.mase = (benchmarkErrors.reduce((s, e) => s + Math.abs(e), 0) / benchmarkErrors.length) / meanNaiveError;
+        }
+        
+        mockResults.benchmark_metrics = benchmarkMetrics;
       }
       
       allResults.push(mockResults);
@@ -722,7 +766,7 @@ const Index = () => {
                 <Library className="mr-2 h-4 w-4" />
                 My Models
               </Button>
-              <Button variant="outline" onClick={handleSaveModel} disabled={segments.length === 0}>
+              <Button variant="outline" onClick={handleSaveModel}>
                 <Save className="mr-2 h-4 w-4" />
                 {currentModelId ? "Update Model" : "Save Model"}
               </Button>
