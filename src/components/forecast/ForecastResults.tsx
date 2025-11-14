@@ -37,6 +37,11 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
   const [reportName, setReportName] = useState("");
   const [exportFormat, setExportFormat] = useState<"csv" | "html" | "pdf">("pdf");
 
+  // Helper to check if a value is valid (not NaN, null, or undefined)
+  const isValidNumber = (value: any): value is number => {
+    return typeof value === 'number' && !isNaN(value) && isFinite(value);
+  };
+
   const openExport = (format: "csv" | "html" | "pdf") => {
     setExportFormat(format);
     setReportName(`Forecast_${new Date().toISOString().split('T')[0]}`);
@@ -320,11 +325,13 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                   </CardHeader>
                   <CardContent>
                     <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={segment.test_data.map((d) => ({
-                        date: d.date,
-                        actual: d.actual,
-                        predicted: d.predicted,
-                      }))}>
+                      <LineChart data={segment.test_data
+                        .filter((d) => isValidNumber(d.actual) && isValidNumber(d.predicted))
+                        .map((d) => ({
+                          date: d.date,
+                          actual: d.actual,
+                          predicted: d.predicted,
+                        }))}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis 
                           dataKey="date" 
@@ -396,11 +403,13 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                   </CardHeader>
                   <CardContent>
                     <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={segment.raw_test_data.map((d) => ({
-                        date: d.date,
-                        actual: d.actual,
-                        predicted: d.predicted,
-                      }))}>
+                      <LineChart data={segment.raw_test_data
+                        .filter((d) => isValidNumber(d.actual) && isValidNumber(d.predicted))
+                        .map((d) => ({
+                          date: d.date,
+                          actual: d.actual,
+                          predicted: d.predicted,
+                        }))}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis 
                           dataKey="date" 
@@ -527,11 +536,11 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       
                       return {
                         date: point.date,
-                        actual: point.actual,
-                        fitted,
-                        forecast,
-                        lower_bound: point.lower_bound,
-                        upper_bound: point.upper_bound,
+                        actual: isValidNumber(point.actual) ? point.actual : null,
+                        fitted: isValidNumber(fitted) ? fitted : null,
+                        forecast: isValidNumber(forecast) ? forecast : null,
+                        lower_bound: isValidNumber(point.lower_bound) ? point.lower_bound : null,
+                        upper_bound: isValidNumber(point.upper_bound) ? point.upper_bound : null,
                       };
                     });
                   })()}>
@@ -664,11 +673,11 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                         
                         return {
                           date: point.date,
-                          actual: point.actual,
-                          fitted,
-                          forecast,
-                          lower_bound: point.lower_bound,
-                          upper_bound: point.upper_bound,
+                          actual: isValidNumber(point.actual) ? point.actual : null,
+                          fitted: isValidNumber(fitted) ? fitted : null,
+                          forecast: isValidNumber(forecast) ? forecast : null,
+                          lower_bound: isValidNumber(point.lower_bound) ? point.lower_bound : null,
+                          upper_bound: isValidNumber(point.upper_bound) ? point.upper_bound : null,
                         };
                       });
                     })()}>
