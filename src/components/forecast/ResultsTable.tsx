@@ -49,13 +49,13 @@ export const ResultsTable = ({
       : ["Date", "Actual", "Predicted", "Lower Bound", "Upper Bound", "Type"];
     
     const rows = allData.map((point, idx) => {
-            const benchmarkPoint = !isRaw && hasBenchmark ? (
-              point.is_test 
-                ? benchmarkTestData[testData.findIndex(t => t.date === point.date)]
-                : point.is_forecast
-                ? benchmarkForecastData[forecastData.findIndex(f => f.date === point.date)]
-                : null
-            ) : null;
+      const benchmarkPoint = hasBenchmark ? (
+        point.is_test 
+          ? benchmarkTestData[testData.findIndex(t => t.date === point.date)]
+          : point.is_forecast
+          ? benchmarkForecastData[forecastData.findIndex(f => f.date === point.date)]
+          : null
+      ) : null;
 
       const baseRow = [
         point.date,
@@ -103,43 +103,99 @@ export const ResultsTable = ({
             <TableHead className="text-right">Predicted</TableHead>
             <TableHead className="text-right">Lower Bound</TableHead>
             <TableHead className="text-right">Upper Bound</TableHead>
-                <TableHead>Type</TableHead>
+            {!isRaw && hasBenchmark && (
+              <>
+                <TableHead className="text-right">{benchmarkModel} Predicted</TableHead>
+                <TableHead className="text-right">{benchmarkModel} Lower</TableHead>
+                <TableHead className="text-right">{benchmarkModel} Upper</TableHead>
+              </>
+            )}
+            <TableHead>Type</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.map((point, idx) => {
+            const benchmarkPoint = !isRaw && hasBenchmark ? (
+              point.is_test 
+                ? benchmarkTestData[testData.findIndex(t => t.date === point.date)]
+                : point.is_forecast
+                ? benchmarkForecastData[forecastData.findIndex(f => f.date === point.date)]
+                : null
+            ) : null;
+
+            return (
+              <TableRow key={idx}>
+                <TableCell>{new Date(point.date).toLocaleDateString()}</TableCell>
+                <TableCell className="text-right">
+                  {point.actual !== undefined ? point.actual.toFixed(4) : "-"}
+                </TableCell>
+                <TableCell className="text-right">{point.predicted.toFixed(4)}</TableCell>
+                <TableCell className="text-right">{point.lower_bound.toFixed(4)}</TableCell>
+                <TableCell className="text-right">{point.upper_bound.toFixed(4)}</TableCell>
+                {!isRaw && hasBenchmark && benchmarkPoint && (
+                  <>
+                    <TableCell className="text-right">{benchmarkPoint.predicted.toFixed(4)}</TableCell>
+                    <TableCell className="text-right">{benchmarkPoint.lower_bound.toFixed(4)}</TableCell>
+                    <TableCell className="text-right">{benchmarkPoint.upper_bound.toFixed(4)}</TableCell>
+                  </>
+                )}
+                {!isRaw && hasBenchmark && !benchmarkPoint && (
+                  <>
+                    <TableCell className="text-right">-</TableCell>
+                    <TableCell className="text-right">-</TableCell>
+                    <TableCell className="text-right">-</TableCell>
+                  </>
+                )}
+                <TableCell>
+                  {point.is_test ? "Test" : point.is_forecast ? "Forecast" : "Training"}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {allData.slice(-50).map((point, idx) => (
-                <TableRow key={idx} className={
-                  point.is_forecast ? "bg-chart-4/10" : 
-                  point.is_test ? "bg-chart-3/10" : 
-                  ""
-                }>
-                  <TableCell className="font-mono text-xs">
-                    {new Date(point.date).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs">
-                    {point.actual !== undefined ? point.actual.toFixed(4) : "-"}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs">
-                    {point.predicted.toFixed(4)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs">
-                    {point.lower_bound.toFixed(4)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-xs">
-                    {point.upper_bound.toFixed(4)}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {point.is_test ? "Test" : point.is_forecast ? "Forecast" : "Training"}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Detailed Results Table</CardTitle>
+            <CardDescription>
+              Complete forecast data for {segment}
+              {hasBenchmark && ` (includes ${benchmarkModel} benchmark)`}
+            </CardDescription>
+          </div>
+          <Button onClick={exportToCSV} variant="outline" size="sm">
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
         </div>
-        {allData.length > 50 && (
-          <p className="text-xs text-muted-foreground mt-2">
-            Showing last 50 rows of {allData.length} total rows
-          </p>
+      </CardHeader>
+      <CardContent>
+        {hasRawData ? (
+          <Tabs value={activeView} onValueChange={(v) => setActiveView(v as 'transformed' | 'raw')}>
+            <TabsList className="grid w-full max-w-md grid-cols-2 mb-4">
+              <TabsTrigger value="transformed" className="flex items-center gap-2">
+                Transformed Data
+                <Badge variant="secondary" className="text-xs">With Transformations</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="raw" className="flex items-center gap-2">
+                Raw Data
+                <Badge variant="outline" className="text-xs">Original</Badge>
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="transformed">
+              {renderTable(allData, false)}
+            </TabsContent>
+            <TabsContent value="raw">
+              {renderTable(allRawData, true)}
+            </TabsContent>
+          </Tabs>
+        ) : (
+          renderTable(allData, false)
         )}
       </CardContent>
     </Card>
