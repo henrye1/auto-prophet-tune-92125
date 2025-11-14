@@ -42,7 +42,7 @@ export const SegmentContextSelector = ({
               <SelectValue placeholder="Select a segment to work with" />
             </SelectTrigger>
             <SelectContent className="z-50 bg-background">
-              {segments.map((segment) => (
+              {segments.filter((segment) => segment.segment !== "").map((segment) => (
                 <SelectItem key={segment.segment} value={segment.segment}>
                   <div className="flex items-center gap-2">
                     <span>{segment.segment}</span>

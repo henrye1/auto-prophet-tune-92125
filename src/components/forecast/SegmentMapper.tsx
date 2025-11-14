@@ -109,7 +109,7 @@ export const SegmentMapper = ({
             </SelectTrigger>
             <SelectContent className="bg-popover max-h-60">
               {availableSegmentValues
-                .filter((val) => !segments.find((s) => s.segmentValue === val))
+                .filter((val) => val !== "" && !segments.find((s) => s.segmentValue === val))
                 .map((value) => (
                   <SelectItem key={value} value={value}>
                     {value}
