@@ -26,6 +26,7 @@ const metricLabels: Record<PerformanceMetric, string> = {
   mape: "MAPE",
   mse: "MSE",
   r2: "R²",
+  adj_r2: "Adjusted R²",
   coverage: "Coverage",
   smape: "SMAPE",
   mase: "MASE",
