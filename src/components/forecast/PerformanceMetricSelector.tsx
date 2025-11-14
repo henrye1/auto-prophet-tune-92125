@@ -15,6 +15,7 @@ const metricDefinitions: Record<PerformanceMetric, { label: string; description:
   mape: { label: "MAPE", description: "Mean Absolute Percentage Error - Average percentage deviation" },
   mse: { label: "MSE", description: "Mean Squared Error - Average of squared differences" },
   r2: { label: "R²", description: "Coefficient of Determination - Proportion of variance explained" },
+  adj_r2: { label: "Adjusted R²", description: "Adjusted R² - R² adjusted for number of predictors" },
   coverage: { label: "Coverage", description: "Percentage of actuals within confidence intervals" },
   smape: { label: "SMAPE", description: "Symmetric Mean Absolute Percentage Error - Symmetric version of MAPE" },
   mase: { label: "MASE", description: "Mean Absolute Scaled Error - Scaled error relative to naive forecast" },

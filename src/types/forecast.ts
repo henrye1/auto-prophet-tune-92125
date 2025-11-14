@@ -81,4 +81,4 @@ export interface ForecastConfig {
   performance_metrics: PerformanceMetric[];
 }
 
-export type PerformanceMetric = 'mae' | 'rmse' | 'mape' | 'mse' | 'r2' | 'coverage' | 'smape' | 'mase';
+export type PerformanceMetric = 'mae' | 'rmse' | 'mape' | 'mse' | 'r2' | 'adj_r2' | 'coverage' | 'smape' | 'mase';
