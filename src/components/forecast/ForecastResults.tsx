@@ -540,33 +540,37 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                     95% Confidence
                   </Badge>
                 </div>
-                <ResponsiveContainer width="100%" height={400}>
-                  <AreaChart data={(() => {
-                    const allData = [...segment.training_data, ...segment.test_data, ...segment.forecast_data];
-                    return allData.map((point, idx) => {
-                      const testStartIdx = segment.training_data.length;
-                      const testEndIdx = testStartIdx + segment.test_data.length;
-                      const forecastStartIdx = testEndIdx;
+                  <ResponsiveContainer width="100%" height={400}>
+                    <AreaChart data={(() => {
+                      const trainingData = segment.training_data || [];
+                      const testData = segment.test_data || [];
+                      const forecastData = segment.forecast_data || [];
+                      const allData = [...trainingData, ...testData, ...forecastData];
                       
-                      let fitted = null;
-                      let forecast = null;
-                      
-                      if (idx >= testStartIdx && idx < testEndIdx) {
-                        fitted = point.predicted;
-                      } else if (idx >= forecastStartIdx) {
-                        forecast = point.predicted;
-                      }
-                      
-                      return {
-                        date: point.date,
-                        actual: isValidNumber(point.actual) ? point.actual : null,
-                        fitted: isValidNumber(fitted) ? fitted : null,
-                        forecast: isValidNumber(forecast) ? forecast : null,
-                        lower_bound: isValidNumber(point.lower_bound) ? point.lower_bound : null,
-                        upper_bound: isValidNumber(point.upper_bound) ? point.upper_bound : null,
-                      };
-                    });
-                  })()}>
+                      return allData.map((point, idx) => {
+                        const testStartIdx = trainingData.length;
+                        const testEndIdx = testStartIdx + testData.length;
+                        const forecastStartIdx = testEndIdx;
+                        
+                        let fitted = null;
+                        let forecast = null;
+                        
+                        if (idx >= testStartIdx && idx < testEndIdx) {
+                          fitted = point.predicted;
+                        } else if (idx >= forecastStartIdx) {
+                          forecast = point.predicted;
+                        }
+                        
+                        return {
+                          date: point.date,
+                          actual: isValidNumber(point.actual) ? point.actual : null,
+                          fitted: isValidNumber(fitted) ? fitted : null,
+                          forecast: isValidNumber(forecast) ? forecast : null,
+                          lower_bound: isValidNumber(point.lower_bound) ? point.lower_bound : null,
+                          upper_bound: isValidNumber(point.upper_bound) ? point.upper_bound : null,
+                        };
+                      });
+                    })()}>
                     <defs>
                       <linearGradient id={`confidenceGradient-transformed-${segment.segment}`} x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="rgb(16, 185, 129)" stopOpacity={0.3} />
@@ -679,10 +683,14 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                   </div>
                   <ResponsiveContainer width="100%" height={400}>
                     <AreaChart data={(() => {
-                      const allData = [...segment.raw_training_data!, ...segment.raw_test_data!, ...segment.raw_forecast_data!];
+                      const rawTrainingData = segment.raw_training_data || [];
+                      const rawTestData = segment.raw_test_data || [];
+                      const rawForecastData = segment.raw_forecast_data || [];
+                      const allData = [...rawTrainingData, ...rawTestData, ...rawForecastData];
+                      
                       return allData.map((point, idx) => {
-                        const testStartIdx = segment.raw_training_data!.length;
-                        const testEndIdx = testStartIdx + segment.raw_test_data!.length;
+                        const testStartIdx = rawTrainingData.length;
+                        const testEndIdx = testStartIdx + rawTestData.length;
                         const forecastStartIdx = testEndIdx;
                         
                         let fitted = null;
