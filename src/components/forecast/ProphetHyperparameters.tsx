@@ -70,7 +70,8 @@ export const ProphetHyperparameters = ({
           segmentData: csvData,
           dateColumn,
           valueColumn,
-          currentParams: parameters
+          currentParams: parameters,
+          frequency: segment.frequency, // Pass frequency to determine appropriate seasonality
         }
       });
 
