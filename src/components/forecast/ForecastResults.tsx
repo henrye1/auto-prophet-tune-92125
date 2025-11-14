@@ -42,6 +42,29 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
     return typeof value === 'number' && !isNaN(value) && isFinite(value);
   };
 
+  // Helper to generate confidence interval legend labels
+  const getConfidenceLabels = (segment: any) => {
+    const intervalWidth = segment.interval_width ?? 0.80;
+    const lowerBound = segment.lower_bound;
+    const upperBound = segment.upper_bound;
+    
+    if (lowerBound !== undefined && upperBound !== undefined) {
+      // Custom percentiles specified
+      return {
+        lower: `Lower Bound (${(lowerBound * 100).toFixed(0)}%)`,
+        upper: `Upper Bound (${(upperBound * 100).toFixed(0)}%)`
+      };
+    } else {
+      // Using interval_width
+      const lowerPercentile = ((1 - intervalWidth) / 2 * 100).toFixed(0);
+      const upperPercentile = ((1 + intervalWidth) / 2 * 100).toFixed(0);
+      return {
+        lower: `Lower Bound (${lowerPercentile}%)`,
+        upper: `Upper Bound (${upperPercentile}%)`
+      };
+    }
+  };
+
   const openExport = (format: "csv" | "html" | "pdf") => {
     setExportFormat(format);
     setReportName(`Forecast_${new Date().toISOString().split('T')[0]}`);
@@ -575,7 +598,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       strokeWidth={1}
                       strokeOpacity={0.3}
                       fill={`url(#confidenceGradient-transformed-${segment.segment})`}
-                      name="Upper Bound (95%)"
+                      name={getConfidenceLabels(segment).upper}
                     />
                     <Area
                       type="monotone"
@@ -584,7 +607,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       strokeWidth={1}
                       strokeOpacity={0.3}
                       fill={`url(#confidenceGradient-transformed-${segment.segment})`}
-                      name="Lower Bound (95%)"
+                      name={getConfidenceLabels(segment).lower}
                     />
                     
                     <Line
@@ -712,7 +735,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                         strokeWidth={1}
                         strokeOpacity={0.3}
                         fill={`url(#confidenceGradient-raw-${segment.segment})`}
-                        name="Upper Bound (95%)"
+                        name={getConfidenceLabels(segment).upper}
                       />
                       <Area
                         type="monotone"
@@ -721,7 +744,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                         strokeWidth={1}
                         strokeOpacity={0.3}
                         fill={`url(#confidenceGradient-raw-${segment.segment})`}
-                        name="Lower Bound (95%)"
+                        name={getConfidenceLabels(segment).lower}
                       />
                       
                       <Line

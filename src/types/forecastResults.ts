@@ -28,6 +28,10 @@ export interface SegmentForecastResult {
   ai_commentary?: string;
   model?: string;
   transformations_applied?: string[];
+  // Confidence interval parameters
+  interval_width?: number;
+  lower_bound?: number;
+  upper_bound?: number;
   // Raw data results (without transformations)
   raw_training_data?: ForecastPoint[];
   raw_test_data?: ForecastPoint[];

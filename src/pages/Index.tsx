@@ -608,6 +608,9 @@ const Index = () => {
       ) as any;
       mockResults.model = selectedModel;
       mockResults.transformations_applied = transformationsSummary;
+      mockResults.interval_width = prophetParams.interval_width;
+      mockResults.lower_bound = prophetParams.lower_bound;
+      mockResults.upper_bound = prophetParams.upper_bound;
 
       // Generate forecast results with RAW data (for comparison)
       if (hasTransformations) {
