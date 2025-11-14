@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Download } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import type { ForecastPoint } from "@/types/forecastResults";
 
 interface ResultsTableProps {
@@ -14,6 +17,9 @@ interface ResultsTableProps {
   benchmarkTrainingData?: ForecastPoint[];
   benchmarkTestData?: ForecastPoint[];
   benchmarkForecastData?: ForecastPoint[];
+  rawTrainingData?: ForecastPoint[];
+  rawTestData?: ForecastPoint[];
+  rawForecastData?: ForecastPoint[];
 }
 
 export const ResultsTable = ({ 
@@ -25,9 +31,16 @@ export const ResultsTable = ({
   benchmarkModel,
   benchmarkTrainingData,
   benchmarkTestData,
-  benchmarkForecastData
+  benchmarkForecastData,
+  rawTrainingData,
+  rawTestData,
+  rawForecastData
 }: ResultsTableProps) => {
+  const [activeView, setActiveView] = useState<'transformed' | 'raw'>('transformed');
+  const hasRawData = rawTrainingData && rawTestData && rawForecastData;
+  
   const allData = [...trainingData, ...testData, ...forecastData];
+  const allRawData = hasRawData ? [...rawTrainingData, ...rawTestData, ...rawForecastData] : [];
   const hasBenchmark = benchmarkModel && benchmarkTestData && benchmarkForecastData;
 
   const exportToCSV = () => {
@@ -36,13 +49,13 @@ export const ResultsTable = ({
       : ["Date", "Actual", "Predicted", "Lower Bound", "Upper Bound", "Type"];
     
     const rows = allData.map((point, idx) => {
-      const benchmarkPoint = hasBenchmark ? (
-        point.is_test 
-          ? benchmarkTestData[testData.findIndex(t => t.date === point.date)]
-          : point.is_forecast
-          ? benchmarkForecastData[forecastData.findIndex(f => f.date === point.date)]
-          : null
-      ) : null;
+            const benchmarkPoint = !isRaw && hasBenchmark ? (
+              point.is_test 
+                ? benchmarkTestData[testData.findIndex(t => t.date === point.date)]
+                : point.is_forecast
+                ? benchmarkForecastData[forecastData.findIndex(f => f.date === point.date)]
+                : null
+            ) : null;
 
       const baseRow = [
         point.date,
@@ -80,33 +93,16 @@ export const ResultsTable = ({
     URL.revokeObjectURL(url);
   };
 
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>Detailed Results Table</CardTitle>
-            <CardDescription>
-              Complete forecast data for {segment}
-              {hasBenchmark && ` (includes ${benchmarkModel} benchmark)`}
-            </CardDescription>
-          </div>
-          <Button onClick={exportToCSV} variant="outline" size="sm">
-            <Download className="mr-2 h-4 w-4" />
-            Export CSV
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-md border max-h-[400px] overflow-auto">
-          <Table>
-            <TableHeader className="sticky top-0 bg-background">
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead className="text-right">Actual</TableHead>
-                <TableHead className="text-right">Predicted</TableHead>
-                <TableHead className="text-right">Lower Bound</TableHead>
-                <TableHead className="text-right">Upper Bound</TableHead>
+  const renderTable = (data: ForecastPoint[], isRaw: boolean = false) => (
+    <div className="rounded-md border max-h-[400px] overflow-auto">
+      <Table>
+        <TableHeader className="sticky top-0 bg-background">
+          <TableRow>
+            <TableHead>Date</TableHead>
+            <TableHead className="text-right">Actual</TableHead>
+            <TableHead className="text-right">Predicted</TableHead>
+            <TableHead className="text-right">Lower Bound</TableHead>
+            <TableHead className="text-right">Upper Bound</TableHead>
                 <TableHead>Type</TableHead>
               </TableRow>
             </TableHeader>

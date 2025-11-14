@@ -720,6 +720,9 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
               benchmarkTrainingData={segment.benchmark_training_data}
               benchmarkTestData={segment.benchmark_test_data}
               benchmarkForecastData={segment.benchmark_forecast_data}
+              rawTrainingData={segment.raw_training_data}
+              rawTestData={segment.raw_test_data}
+              rawForecastData={segment.raw_forecast_data}
             />
           </TabsContent>
         ))}
