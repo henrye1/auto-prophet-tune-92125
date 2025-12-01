@@ -188,9 +188,10 @@ export const DataAnalysisTools = ({
               status: 'transformed' as VariableStatus,
               transformations: transformations,
               aiRecommendations: analysis,
-              stationarityTest: testResults.after?.adf || testResults.before.adf,
-              acfData: testResults.after?.acf || testResults.before.acf,
-              pacfData: testResults.after?.pacf || testResults.before.pacf,
+              // Use 'after' stats if transformations were applied, otherwise 'before'
+              stationarityTest: testResults.after ? testResults.after.adf : testResults.before.adf,
+              acfData: testResults.after ? testResults.after.acf : testResults.before.acf,
+              pacfData: testResults.after ? testResults.after.pacf : testResults.before.pacf,
               beforeData: originalData,
               afterData: transformed,
               beforeStats: testResults.before,
