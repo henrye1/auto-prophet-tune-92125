@@ -38,140 +38,263 @@ const generateMockForecast = (
   const lowerPercentile = prophetParams.lower_bound ?? (1 - prophetParams.interval_width) / 2;
   const upperPercentile = prophetParams.upper_bound ?? (1 + prophetParams.interval_width) / 2;
 
-  // Training data with actual values
-  const training = trainingData.map(row => ({
-    date: row[dateColumn],
-    actual: parseFloat(row[dependentVariable]),
-    predicted: parseFloat(row[dependentVariable]),
-    lower_bound: parseFloat(row[dependentVariable]) * 0.95,
-    upper_bound: parseFloat(row[dependentVariable]) * 1.05,
-  }));
+  const parseNumeric = (value: any): number => {
+    if (typeof value === "number") return value;
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : NaN;
+  };
+
+  const isValidNumber = (value: any): value is number => {
+    return typeof value === "number" && !isNaN(value) && isFinite(value);
+  };
+
+  // Training data with actual values (may include NaN, filtered later)
+  const training = trainingData.map((row) => {
+    const actual = parseNumeric(row[dependentVariable]);
+    return {
+      date: row[dateColumn],
+      actual,
+      predicted: actual,
+      lower_bound: isValidNumber(actual) ? actual * 0.95 : NaN,
+      upper_bound: isValidNumber(actual) ? actual * 1.05 : NaN,
+    };
+  });
 
   // Test data with predictions
-  const test = testData.map((row, idx) => {
-    const actual = parseFloat(row[dependentVariable]);
+  const test = testData.map((row) => {
+    const actual = parseNumeric(row[dependentVariable]);
     const noise = (Math.random() - 0.5) * 0.1;
-    const predicted = actual * (1 + noise);
+    const predicted = isValidNumber(actual) ? actual * (1 + noise) : NaN;
     const intervalWidth = upperPercentile - lowerPercentile;
     return {
       date: row[dateColumn],
       actual,
       predicted,
-      lower_bound: predicted * (1 - intervalWidth / 2),
-      upper_bound: predicted * (1 + intervalWidth / 2),
+      lower_bound: isValidNumber(predicted)
+        ? predicted * (1 - intervalWidth / 2)
+        : NaN,
+      upper_bound: isValidNumber(predicted)
+        ? predicted * (1 + intervalWidth / 2)
+        : NaN,
       is_test: true,
     };
   });
 
-  // Generate forecast data
-  const lastDate = testData.length > 0 
-    ? new Date(testData[testData.length - 1][dateColumn])
-    : new Date(trainingData[trainingData.length - 1][dateColumn]);
-  
-  const avgValue = trainingData.reduce((sum, row) => sum + parseFloat(row[dependentVariable]), 0) / trainingData.length;
-  const forecast = [];
-  
-  for (let i = 1; i <= segment.forecast_periods; i++) {
-    const forecastDate = new Date(lastDate);
-    forecastDate.setMonth(forecastDate.getMonth() + i);
-    
-    const trend = 1 + (i * 0.005);
-    const seasonality = Math.sin((i / 6) * Math.PI) * 0.1;
-    const predicted = avgValue * trend * (1 + seasonality);
-    const intervalWidth = upperPercentile - lowerPercentile;
-    
-    forecast.push({
-      date: forecastDate.toISOString().split('T')[0],
-      predicted,
-      lower_bound: predicted * (1 - intervalWidth / 2 - i * 0.01),
-      upper_bound: predicted * (1 + intervalWidth / 2 + i * 0.01),
-      is_forecast: true,
-    });
+  // Generate forecast data using only valid training values
+  const lastDateSource = testData.length > 0 ? testData : trainingData;
+  const lastDate =
+    lastDateSource.length > 0
+      ? new Date(lastDateSource[lastDateSource.length - 1][dateColumn])
+      : new Date();
+
+  const validTrainingForAvg = training.filter((t) => isValidNumber(t.actual));
+  const avgValue =
+    validTrainingForAvg.length > 0
+      ? validTrainingForAvg.reduce((sum, t) => sum + (t.actual as number), 0) /
+        validTrainingForAvg.length
+      : NaN;
+
+  const forecast: any[] = [];
+
+  if (isValidNumber(avgValue)) {
+    for (let i = 1; i <= segment.forecast_periods; i++) {
+      const forecastDate = new Date(lastDate);
+      forecastDate.setMonth(forecastDate.getMonth() + i);
+
+      const trend = 1 + i * 0.005;
+      const seasonality = Math.sin((i / 6) * Math.PI) * 0.1;
+      const predicted = avgValue * trend * (1 + seasonality);
+      const intervalWidth = upperPercentile - lowerPercentile;
+
+      forecast.push({
+        date: forecastDate.toISOString().split("T")[0],
+        predicted,
+        lower_bound:
+          predicted * (1 - intervalWidth / 2 - i * 0.01),
+        upper_bound:
+          predicted * (1 + intervalWidth / 2 + i * 0.01),
+        is_forecast: true,
+      });
+    }
   }
 
   // Calculate all requested metrics
   const metrics: any = {};
-  
-  // Check if we have test data
-  if (test.length === 0) {
-    console.log(`[Metrics Calculation] Segment: ${segment.segmentValue} - No test data available`);
-    // Return undefined for all metrics when there's no test data
-    selectedMetrics.forEach(metric => {
+
+  // Filter to only valid numeric test points for metrics
+  const validTest = test.filter(
+    (t) => isValidNumber(t.actual) && isValidNumber(t.predicted)
+  );
+
+  if (validTest.length === 0) {
+    console.log(
+      `[Metrics Calculation] Segment: ${segment.segmentValue} - No valid test data available`
+    );
+    selectedMetrics.forEach((metric) => {
       metrics[metric] = undefined;
     });
   } else {
-    const actualValues = test.map(t => t.actual!);
-    const predictedValues = test.map(t => t.predicted);
-    const errors = test.map((t, i) => t.actual! - t.predicted);
-    
+    const actualValues = validTest.map((t) => t.actual as number);
+    const predictedValues = validTest.map((t) => t.predicted as number);
+    const errors = validTest.map(
+      (_t, i) => actualValues[i] - predictedValues[i]
+    );
+
     console.log(`[Metrics Calculation] Segment: ${segment.segmentValue}`);
-    console.log(`[Metrics Calculation] Test data points: ${test.length}`);
-    console.log(`[Metrics Calculation] Selected metrics:`, selectedMetrics);
-    console.log(`[Metrics Calculation] Actual values sample:`, actualValues.slice(0, 3));
-    console.log(`[Metrics Calculation] Predicted values sample:`, predictedValues.slice(0, 3));
-    console.log(`[Metrics Calculation] Errors sample:`, errors.slice(0, 3));
-    
-    if (selectedMetrics.includes('mae')) {
-      metrics.mae = errors.reduce((sum, e) => sum + Math.abs(e), 0) / errors.length;
+    console.log(
+      `[Metrics Calculation] Test data points: ${validTest.length}`
+    );
+    console.log(
+      `[Metrics Calculation] Selected metrics:`,
+      selectedMetrics
+    );
+    console.log(
+      `[Metrics Calculation] Actual values sample:`,
+      actualValues.slice(0, 3)
+    );
+    console.log(
+      `[Metrics Calculation] Predicted values sample:`,
+      predictedValues.slice(0, 3)
+    );
+    console.log(
+      `[Metrics Calculation] Errors sample:`,
+      errors.slice(0, 3)
+    );
+
+    if (selectedMetrics.includes("mae")) {
+      metrics.mae =
+        errors.reduce((sum, e) => sum + Math.abs(e), 0) / errors.length;
       console.log(`[Metrics Calculation] MAE calculated:`, metrics.mae);
     }
-    if (selectedMetrics.includes('mse')) {
-      metrics.mse = errors.reduce((sum, e) => sum + e * e, 0) / errors.length;
+    if (selectedMetrics.includes("mse")) {
+      metrics.mse =
+        errors.reduce((sum, e) => sum + e * e, 0) / errors.length;
       console.log(`[Metrics Calculation] MSE calculated:`, metrics.mse);
     }
-    if (selectedMetrics.includes('rmse')) {
-      metrics.rmse = Math.sqrt(errors.reduce((sum, e) => sum + e * e, 0) / errors.length);
+    if (selectedMetrics.includes("rmse")) {
+      metrics.rmse = Math.sqrt(
+        errors.reduce((sum, e) => sum + e * e, 0) / errors.length
+      );
       console.log(`[Metrics Calculation] RMSE calculated:`, metrics.rmse);
     }
-    if (selectedMetrics.includes('mape')) {
-      metrics.mape = errors.reduce((sum, e, i) => sum + Math.abs(e / actualValues[i]) * 100, 0) / errors.length;
+    if (selectedMetrics.includes("mape")) {
+      const mapeSamples = actualValues
+        .map((v, i) => ({ v, e: errors[i] }))
+        .filter((x) => x.v !== 0);
+      if (mapeSamples.length > 0) {
+        metrics.mape =
+          mapeSamples.reduce(
+            (sum, x) => sum + Math.abs(x.e / x.v) * 100,
+            0
+          ) / mapeSamples.length;
+      } else {
+        metrics.mape = undefined;
+      }
       console.log(`[Metrics Calculation] MAPE calculated:`, metrics.mape);
     }
-    if (selectedMetrics.includes('smape')) {
-      metrics.smape = errors.reduce((sum, e, i) => {
-        const denominator = (Math.abs(actualValues[i]) + Math.abs(predictedValues[i])) / 2;
-        return sum + Math.abs(e) / denominator * 100;
-      }, 0) / errors.length;
+    if (selectedMetrics.includes("smape")) {
+      const smapeSamples = actualValues
+        .map((v, i) => ({ v, p: predictedValues[i], e: errors[i] }))
+        .filter((x) => Math.abs(x.v) + Math.abs(x.p) > 0);
+      if (smapeSamples.length > 0) {
+        metrics.smape =
+          smapeSamples.reduce((sum, x) => {
+            const denominator =
+              (Math.abs(x.v) + Math.abs(x.p)) / 2;
+            return sum + (Math.abs(x.e) / denominator) * 100;
+          }, 0) / smapeSamples.length;
+      } else {
+        metrics.smape = undefined;
+      }
       console.log(`[Metrics Calculation] SMAPE calculated:`, metrics.smape);
     }
-    if (selectedMetrics.includes('r2')) {
-      const mean = actualValues.reduce((s, v) => s + v, 0) / actualValues.length;
+    if (selectedMetrics.includes("r2")) {
+      const mean =
+        actualValues.reduce((s, v) => s + v, 0) / actualValues.length;
       const ssRes = errors.reduce((s, e) => s + e * e, 0);
-      const ssTot = actualValues.reduce((s, v) => s + Math.pow(v - mean, 2), 0);
-      metrics.r2 = 1 - (ssRes / ssTot);
+      const ssTot = actualValues.reduce(
+        (s, v) => s + Math.pow(v - mean, 2),
+        0
+      );
+      metrics.r2 = ssTot === 0 ? undefined : 1 - ssRes / ssTot;
       console.log(`[Metrics Calculation] R² calculated:`, metrics.r2);
     }
-    if (selectedMetrics.includes('adj_r2')) {
-      const mean = actualValues.reduce((s, v) => s + v, 0) / actualValues.length;
-      const ssRes = errors.reduce((s, e) => s + e * e, 0);
-      const ssTot = actualValues.reduce((s, v) => s + Math.pow(v - mean, 2), 0);
-      const r2 = 1 - (ssRes / ssTot);
+    if (selectedMetrics.includes("adj_r2")) {
       const n = actualValues.length;
       const p = segment.regressors.length; // number of predictors
-      metrics.adj_r2 = 1 - ((1 - r2) * (n - 1) / (n - p - 1));
-      console.log(`[Metrics Calculation] Adjusted R² calculated:`, metrics.adj_r2);
+      if (metrics.r2 !== undefined && n > p + 1) {
+        metrics.adj_r2 =
+          1 - ((1 - metrics.r2) * (n - 1)) / (n - p - 1);
+      } else {
+        metrics.adj_r2 = undefined;
+      }
+      console.log(
+        `[Metrics Calculation] Adjusted R² calculated:`,
+        metrics.adj_r2
+      );
     }
-    if (selectedMetrics.includes('coverage')) {
-      metrics.coverage = test.filter(t => t.actual! >= t.lower_bound && t.actual! <= t.upper_bound).length / test.length * 100;
-      console.log(`[Metrics Calculation] Coverage calculated:`, metrics.coverage);
+    if (selectedMetrics.includes("coverage")) {
+      const coverageSamples = validTest.filter(
+        (t) =>
+          isValidNumber(t.lower_bound) && isValidNumber(t.upper_bound)
+      );
+      if (coverageSamples.length > 0) {
+        metrics.coverage =
+          (coverageSamples.filter(
+            (t) =>
+              (t.actual as number) >= (t.lower_bound as number) &&
+              (t.actual as number) <= (t.upper_bound as number)
+          ).length /
+            coverageSamples.length) *
+          100;
+      } else {
+        metrics.coverage = undefined;
+      }
+      console.log(
+        `[Metrics Calculation] Coverage calculated:`,
+        metrics.coverage
+      );
     }
-    if (selectedMetrics.includes('mase')) {
-      const naiveErrors = actualValues.slice(1).map((v, i) => Math.abs(v - actualValues[i]));
-      const meanNaiveError = naiveErrors.reduce((s, e) => s + e, 0) / naiveErrors.length;
-      metrics.mase = (errors.reduce((s, e) => s + Math.abs(e), 0) / errors.length) / meanNaiveError;
+    if (selectedMetrics.includes("mase")) {
+      const naiveErrors = actualValues
+        .slice(1)
+        .map((v, i) => Math.abs(v - actualValues[i]));
+      const meanNaiveError =
+        naiveErrors.length > 0
+          ? naiveErrors.reduce((s, e) => s + e, 0) / naiveErrors.length
+          : 0;
+      if (meanNaiveError > 0) {
+        metrics.mase =
+          (errors.reduce((s, e) => s + Math.abs(e), 0) / errors.length) /
+          meanNaiveError;
+      } else {
+        metrics.mase = undefined;
+      }
       console.log(`[Metrics Calculation] MASE calculated:`, metrics.mase);
     }
-    
+
     console.log(`[Metrics Calculation] Final metrics object:`, metrics);
   }
 
   // AI Commentary
-  const ai_commentary = 
+  const ai_commentary =
     `Performance Analysis:\n\n` +
-    `The model shows ${metrics.mape < 10 ? 'excellent' : metrics.mape < 20 ? 'good' : 'moderate'} accuracy with MAPE of ${metrics.mape?.toFixed(1)}%. ` +
-    `${metrics.coverage > 90 ? 'Confidence intervals effectively capture uncertainty.' : 'Consider adjusting interval width.'}\n\n` +
-    `The ${metrics.r2 > 0.8 ? 'strong' : metrics.r2 > 0.6 ? 'moderate' : 'weak'} R² of ${metrics.r2?.toFixed(3)} indicates ` +
-    `${metrics.r2 > 0.8 ? 'the model captures most variance in the data' : 'there may be room for improvement'}.`;
+    `The model shows ${
+      metrics.mape < 10 ? "excellent" : metrics.mape < 20 ? "good" : "moderate"
+    } accuracy with MAPE of ${metrics.mape?.toFixed(1)}%. ` +
+    `${
+      metrics.coverage > 90
+        ? "Confidence intervals effectively capture uncertainty."
+        : "Consider adjusting interval width."
+    }\n\n` +
+    `The ${
+      metrics.r2 > 0.8 ? "strong" : metrics.r2 > 0.6 ? "moderate" : "weak"
+    } R² of ${metrics.r2?.toFixed(3)} indicates ` +
+    `${
+      metrics.r2 > 0.8
+        ? "the model captures most variance in the data"
+        : "there may be room for improvement"
+    }.`;
 
   return {
     segment: segment.segment,
