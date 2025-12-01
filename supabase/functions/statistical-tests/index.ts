@@ -129,6 +129,7 @@ function applyTransformations(data: number[], transformations: any[]): number[] 
     switch (transform.type) {
       case 'standardize':
         const validData = transformed.filter(v => !isNaN(v) && isFinite(v));
+        if (validData.length < 10) break;
         const mean = validData.reduce((a, b) => a + b, 0) / validData.length;
         const variance = validData.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / validData.length;
         const std = Math.sqrt(variance);
@@ -153,8 +154,14 @@ function applyTransformations(data: number[], transformations: any[]): number[] 
         }
         break;
     }
-    // Remove NaN values
+    // Filter out NaN/Inf values after each transformation to prevent compounding issues
     transformed = transformed.filter(v => !isNaN(v) && isFinite(v));
+    
+    // Safety check - ensure we still have enough data
+    if (transformed.length < 10) {
+      console.warn(`Insufficient data after ${transform.type} transformation: ${transformed.length} points`);
+      break;
+    }
   }
   
   return transformed;

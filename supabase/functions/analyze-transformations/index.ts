@@ -19,12 +19,28 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    // Prepare data summary for AI analysis
+    // Prepare data summary for AI analysis with stationarity indicators
     const dataDescription = variables.map((v: any) => {
-      const values = sampleData.map((row: any) => parseFloat(row[v.name]) || 0);
+      const values = sampleData.map((row: any) => parseFloat(row[v.name]) || 0).filter((v: number) => !isNaN(v));
       const mean = values.reduce((a: number, b: number) => a + b, 0) / values.length;
       const variance = values.reduce((a: number, b: number) => a + Math.pow(b - mean, 2), 0) / values.length;
       const std = Math.sqrt(variance);
+      
+      // Calculate trend indicator
+      const firstHalf = values.slice(0, Math.floor(values.length / 2));
+      const secondHalf = values.slice(Math.floor(values.length / 2));
+      const meanFirst = firstHalf.reduce((a: number, b: number) => a + b, 0) / firstHalf.length;
+      const meanSecond = secondHalf.reduce((a: number, b: number) => a + b, 0) / secondHalf.length;
+      const trendIndicator = ((meanSecond - meanFirst) / meanFirst * 100).toFixed(2);
+      
+      // Check for exponential growth pattern
+      const hasExponentialGrowth = values.every((v: number) => v > 0) && 
+        values.slice(1).some((v: number, i: number) => (v / values[i] - 1) > 0.1);
+      
+      // Check variance stability
+      const varFirst = firstHalf.reduce((a: number, b: number) => a + Math.pow(b - meanFirst, 2), 0) / firstHalf.length;
+      const varSecond = secondHalf.reduce((a: number, b: number) => a + Math.pow(b - meanSecond, 2), 0) / secondHalf.length;
+      const varianceChange = ((varSecond - varFirst) / varFirst * 100).toFixed(2);
       
       return {
         name: v.name,
@@ -33,35 +49,66 @@ serve(async (req) => {
         std: std.toFixed(2),
         min: Math.min(...values).toFixed(2),
         max: Math.max(...values).toFixed(2),
+        trendIndicator: trendIndicator,
+        varianceChange: varianceChange,
+        hasExponentialGrowth: hasExponentialGrowth,
+        coefficientOfVariation: (std / mean).toFixed(4),
         sampleValues: values.slice(0, 20).map((v: number) => v.toFixed(2))
       };
     });
 
-    const systemPrompt = `You are a time series analysis expert. Analyze the provided variables and suggest appropriate transformations to achieve stationarity.
+    const systemPrompt = `You are a time series stationarity expert. Your PRIMARY GOAL is to recommend transformations that WILL achieve stationarity (p-value < 0.05 in ADF test).
 
-Available transformations:
-1. standardize - Z-score normalization (x - mean) / std
-2. log - Natural logarithm (for positive data with exponential growth)
-3. difference - First difference (removes linear trends)
-4. seasonal_difference - Seasonal differencing (removes seasonal patterns)
-5. box_cox - Power transformation (flexible variance stabilization)
+CRITICAL STATIONARITY INDICATORS PROVIDED:
+- trendIndicator: % change in mean between first and second half (high values = strong trend)
+- varianceChange: % change in variance between halves (high values = non-stationary variance)
+- hasExponentialGrowth: boolean indicating exponential growth pattern
+- coefficientOfVariation: std/mean ratio (high values = high relative variance)
+
+TRANSFORMATION STRATEGY FOR STATIONARITY:
+
+1. log - Apply FIRST if:
+   - hasExponentialGrowth = true OR
+   - coefficientOfVariation > 0.5 OR
+   - varianceChange > 50%
+   - Reason: Stabilizes exponential growth and variance
+
+2. difference - Apply if:
+   - trendIndicator > 10% (strong upward/downward trend) OR
+   - After log transformation for trended data
+   - Reason: Removes linear and polynomial trends
+
+3. seasonal_difference - Apply if:
+   - Data shows regular cyclical patterns OR
+   - After log + difference for seasonal trends
+   - Parameters: seasonal_period (e.g., 12 for monthly, 7 for daily)
+   - Reason: Removes seasonal components
+
+4. standardize - Apply LAST to:
+   - Scale the final stationary series to mean=0, std=1
+   - Makes it easier to compare variables
+   - Reason: Normalizes scale without affecting stationarity
+
+COMMON TRANSFORMATION SEQUENCES:
+- Exponential growth with trend: [log, difference, standardize]
+- Strong trend only: [difference, standardize]
+- Seasonal data: [log, difference, seasonal_difference, standardize]
+- High variance: [log, standardize]
+- Already near-stationary: [standardize]
+
+RULES:
+1. ALWAYS recommend at least 2 transformations for data with trendIndicator > 5%
+2. Log should come BEFORE difference when both are needed
+3. Seasonal_difference should come AFTER regular difference
+4. Standardize should ALWAYS be last if included
+5. Be AGGRESSIVE - aim for p-value < 0.05
 
 Available forecasting models:
-- prophet: Facebook's Prophet (best for data with strong seasonality and holidays)
-- autogluon: AutoML ensemble (best for complex patterns and automatic feature engineering)
-- arima: ARIMA (best for linear patterns with clear autocorrelation)
-- ar: AutoRegressive (best for short-term dependencies)
-- arma: ARMA (best for stationary series with both AR and MA components)
-
-For each variable, suggest:
-1. 1-3 transformations to apply in sequence
-2. The most appropriate forecasting model based on the data characteristics
-
-Consider:
-- Data characteristics (trend, seasonality, variance patterns)
-- The goal of achieving stationarity
-- Whether it's a dependent variable or regressor
-- Which model best fits the observed patterns
+- prophet: Best for strong seasonality, holidays, multiple seasonalities
+- autogluon: Best for complex patterns, automatic feature engineering
+- arima: Best for stationary series with clear autocorrelation structure
+- ar: Best for short-term autoregressive dependencies
+- arma: Best for stationary series with both AR and MA components
 
 Return ONLY valid JSON in this exact format (no markdown, no extra text):
 {
@@ -72,11 +119,11 @@ Return ONLY valid JSON in this exact format (no markdown, no extra text):
       "recommendations": [
         {
           "transform": "transform_type",
-          "reason": "brief reason why this helps",
+          "reason": "specific reason based on the stationarity indicators",
           "order": 1
         }
       ],
-      "rationale": "overall analysis summary",
+      "rationale": "explain how these transformations address non-stationarity",
       "confidence": "high" or "medium" or "low",
       "recommended_model": "prophet" or "autogluon" or "arima" or "ar" or "arma",
       "model_rationale": "why this model is best for this data"
@@ -84,11 +131,11 @@ Return ONLY valid JSON in this exact format (no markdown, no extra text):
   ]
 }`;
 
-    const userPrompt = `Analyze these time series variables and suggest transformations:
+    const userPrompt = `Analyze these time series variables with their stationarity indicators and recommend aggressive transformations to achieve stationarity (ADF p-value < 0.05):
 
 ${JSON.stringify(dataDescription, null, 2)}
 
-Return transformation recommendations for each variable.`;
+Based on the stationarity indicators (trendIndicator, varianceChange, hasExponentialGrowth, coefficientOfVariation), recommend transformation sequences that will make each variable stationary. Be aggressive in your recommendations.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -98,7 +145,7 @@ Return transformation recommendations for each variable.`;
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
-        temperature: 0.3,
+        temperature: 0.2,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
