@@ -17,7 +17,22 @@ function adfTest(data: number[]): any {
   
   // Test statistic approximation
   const testStat = -std * Math.sqrt(n / 12);
-  const pValue = testStat < -2.86 ? 0.02 : (testStat < -2.57 ? 0.08 : 0.15);
+  
+  // More granular p-value calculation using continuous approximation
+  let pValue: number;
+  if (testStat < -3.96) {
+    pValue = 0.001;
+  } else if (testStat < -3.43) {
+    pValue = 0.005 + (testStat + 3.96) * (0.005 / 0.53);
+  } else if (testStat < -2.86) {
+    pValue = 0.01 + (testStat + 3.43) * (0.04 / 0.57);
+  } else if (testStat < -2.57) {
+    pValue = 0.05 + (testStat + 2.86) * (0.05 / 0.29);
+  } else if (testStat < -1.96) {
+    pValue = 0.10 + (testStat + 2.57) * (0.15 / 0.61);
+  } else {
+    pValue = 0.25 + Math.min((testStat + 1.96) * 0.1, 0.65);
+  }
   
   return {
     test_statistic: parseFloat(testStat.toFixed(3)),
