@@ -412,12 +412,21 @@ const Index = () => {
           const newStates: Record<string, any> = {};
           const dependentDataValues = segmentData.map(row => row[dependentVariable]);
 
-          const testPromises = result.analyses.map(async (analysis: any) => {
+          // Safety check for analyses array
+          const analyses = result?.analyses || [];
+          if (analyses.length === 0) {
+            console.warn(`No analyses returned for ${segment.segmentValue}, using defaults`);
+            return { segmentValue: segment.segmentValue, states: {} };
+          }
+
+          const testPromises = analyses.map(async (analysis: any) => {
             const varKey = analysis.type === 'dependent' ? 'dependent' : analysis.variable;
             const columnName = varKey === "dependent" ? dependentVariable : varKey;
             const variableData = segmentData.map(row => row[columnName]);
 
-            const transformations = analysis.recommendations.map((rec: any) => ({
+            // Safety check for recommendations array
+            const recommendations = analysis?.recommendations || [];
+            const transformations = recommendations.map((rec: any) => ({
               type: rec.transform,
               variable: varKey,
               applied: true
@@ -491,8 +500,8 @@ const Index = () => {
 
           return { segmentValue: segment.segmentValue, states: newStates };
         } catch (err: any) {
-          console.error(`Error analyzing segment ${segment.segment}:`, err);
-          return { segmentValue: segment.segmentValue, error: err.message };
+          console.warn(`Analysis incomplete for segment ${segment.segmentValue}:`, err?.message || err);
+          return { segmentValue: segment.segmentValue, states: {} };
         }
       });
 
