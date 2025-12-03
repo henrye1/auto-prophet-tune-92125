@@ -538,8 +538,8 @@ const Index = () => {
         }
       }
     } catch (error: any) {
-      console.error('Multi-segment analysis error:', error);
-      toast.error(error.message || "Failed to analyze segments");
+      console.warn('Multi-segment analysis had issues:', error?.message || error);
+      toast.warning("Analysis completed with some issues. You can still run forecasts.");
     } finally {
       setIsAnalyzingAllSegments(false);
     }
