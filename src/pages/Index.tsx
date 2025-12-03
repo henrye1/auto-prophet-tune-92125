@@ -384,14 +384,29 @@ const Index = () => {
         ];
 
         try {
-          const { data: result, error } = await supabase.functions.invoke('analyze-transformations', {
-            body: {
-              variables,
-              sampleData: segmentData.slice(0, 100)
-            }
-          });
-
-          if (error) throw error;
+          let result;
+          try {
+            const response = await supabase.functions.invoke('analyze-transformations', {
+              body: {
+                variables,
+                sampleData: segmentData.slice(0, 100)
+              }
+            });
+            if (response.error) throw response.error;
+            result = response.data;
+          } catch (edgeFnError) {
+            // Edge function failed - use fallback with no AI recommendations
+            console.warn(`AI analysis unavailable for ${segment.segmentValue}, using defaults`);
+            result = {
+              analyses: variables.map(v => ({
+                variable: v.name,
+                type: v.type,
+                recommendations: [],
+                recommended_model: 'prophet',
+                model_rationale: 'Default (AI service unavailable)'
+              }))
+            };
+          }
 
           // Process results similar to DataAnalysisTools
           const newStates: Record<string, any> = {};
@@ -453,13 +468,15 @@ const Index = () => {
                 }
               };
             } catch (err) {
-              console.error(`Error processing ${varKey} for segment ${segment.segment}:`, err);
+              console.warn(`Statistical tests unavailable for ${varKey}, continuing without:`, err);
               return {
                 varKey,
                 state: {
-                  status: 'analyzing',
-                  transformations: transformations,
+                  status: 'ready',
+                  transformations: [],
                   aiRecommendations: analysis,
+                  recommendedModel: analysis.recommended_model || 'prophet',
+                  modelRationale: analysis.model_rationale || 'Default model',
                   beforeData: originalData,
                   afterData: originalData
                 }
