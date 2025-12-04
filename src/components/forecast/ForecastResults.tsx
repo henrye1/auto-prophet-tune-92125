@@ -128,18 +128,37 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
       if (!dateVal) return '';
       const str = String(dateVal);
 
+      // Handle YYYY/MM/DD format (with slashes) - monthly data
+      if (/^\d{4}\/\d{2}\/\d{2}$/.test(str)) {
+        const [year, month] = str.split('/');
+        return new Date(parseInt(year), parseInt(month) - 1, 1)
+          .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+      }
+
+      // Handle YYYY-MM-DD format (with dashes)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        const [year, month, day] = str.split('-');
+        const d = parseInt(day);
+        if (d === 1 || d >= 28) {
+          return new Date(parseInt(year), parseInt(month) - 1, d)
+            .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        }
+        return new Date(parseInt(year), parseInt(month) - 1, d)
+          .toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+      }
+
       // Handle YYYY-MM format directly
       if (/^\d{4}-\d{2}$/.test(str)) {
         const [year, month] = str.split('-');
-        const date = new Date(parseInt(year), parseInt(month) - 1, 1);
-        return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        return new Date(parseInt(year), parseInt(month) - 1, 1)
+          .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
       }
 
       try {
         const date = new Date(str);
         if (!isNaN(date.getTime())) {
-          // Check if it looks like monthly data (day is 1 or gaps are monthly)
-          if (date.getDate() === 1) {
+          const day = date.getDate();
+          if (day === 1 || day >= 28) {
             return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
           }
           return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
@@ -147,7 +166,6 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
       } catch {
         // Fall through
       }
-      // Return shortened version of original string
       return str.length > 10 ? str.slice(0, 10) : str;
     };
 
@@ -211,11 +229,30 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
 
   const formatDate = (dateStr: string): string => {
     try {
+      // Handle YYYY/MM/DD format (with slashes) - monthly data
+      if (/^\d{4}\/\d{2}\/\d{2}$/.test(dateStr)) {
+        const [year, month] = dateStr.split('/');
+        return new Date(parseInt(year), parseInt(month) - 1, 1)
+          .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+      }
+
+      // Handle YYYY-MM-DD format (with dashes)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        const [year, month, day] = dateStr.split('-');
+        const d = parseInt(day);
+        if (d === 1 || d >= 28 || isMonthlyData) {
+          return new Date(parseInt(year), parseInt(month) - 1, d)
+            .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        }
+        return new Date(parseInt(year), parseInt(month) - 1, d)
+          .toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+      }
+
       // Handle YYYY-MM format directly
       if (/^\d{4}-\d{2}$/.test(dateStr)) {
         const [year, month] = dateStr.split('-');
-        const date = new Date(parseInt(year), parseInt(month) - 1, 1);
-        return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        return new Date(parseInt(year), parseInt(month) - 1, 1)
+          .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
       }
 
       const date = new Date(dateStr);
@@ -223,10 +260,8 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
         return dateStr;
       }
       if (isMonthlyData) {
-        // For monthly data, show "Jan 24" format
         return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
       }
-      // For daily/weekly data, show full date
       return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
     } catch {
       return dateStr;
@@ -431,21 +466,23 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Before Transformation */}
-                  <div className="border rounded-lg p-4">
-                    <h4 className="text-sm font-medium mb-2 text-center">Original Data</h4>
+                  <div className="border-2 rounded-lg p-4 bg-blue-50/30">
+                    <h4 className="text-sm font-medium mb-2 text-center text-blue-700">Original Data (Before)</h4>
                     <div className="h-[250px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={transformationComparisonData.beforeData}>
+                        <LineChart data={transformationComparisonData.beforeData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                           <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-                          <YAxis tick={{ fontSize: 9 }} domain={['auto', 'auto']} />
+                          <YAxis tick={{ fontSize: 9 }} domain={['dataMin', 'dataMax']} />
                           <Tooltip />
                           <Line
-                            type="monotone"
+                            type="linear"
                             dataKey="value"
                             stroke="#3b82f6"
                             strokeWidth={2}
                             dot={false}
+                            connectNulls={true}
+                            isAnimationActive={false}
                             name="Original"
                           />
                         </LineChart>
@@ -457,24 +494,26 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
                   </div>
 
                   {/* After Transformation */}
-                  <div className="border rounded-lg p-4">
-                    <h4 className="text-sm font-medium mb-2 text-center">
+                  <div className="border-2 rounded-lg p-4 bg-green-50/30">
+                    <h4 className="text-sm font-medium mb-2 text-center text-green-700">
                       After Transformation
                       {!hasTransformations && " (No transformation applied)"}
                     </h4>
                     <div className="h-[250px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={transformationComparisonData.afterData}>
+                        <LineChart data={transformationComparisonData.afterData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                           <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-                          <YAxis tick={{ fontSize: 9 }} domain={['auto', 'auto']} />
+                          <YAxis tick={{ fontSize: 9 }} domain={['dataMin', 'dataMax']} />
                           <Tooltip />
                           <Line
-                            type="monotone"
+                            type="linear"
                             dataKey="value"
                             stroke="#22c55e"
                             strokeWidth={2}
                             dot={false}
+                            connectNulls={true}
+                            isAnimationActive={false}
                             name="Transformed"
                           />
                         </LineChart>

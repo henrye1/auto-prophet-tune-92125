@@ -236,18 +236,40 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
       if (!dateVal) return '';
       const str = String(dateVal);
 
+      // Handle YYYY/MM/DD format (with slashes) - convert to parseable format
+      if (/^\d{4}\/\d{2}\/\d{2}$/.test(str)) {
+        const [year, month, day] = str.split('/');
+        // For monthly data (end of month dates), show just month/year
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+          .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+      }
+
+      // Handle YYYY-MM-DD format (with dashes)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        const [year, month, day] = str.split('-');
+        const d = parseInt(day);
+        // If day is 1 or end of month (28-31), treat as monthly
+        if (d === 1 || d >= 28) {
+          return new Date(parseInt(year), parseInt(month) - 1, d)
+            .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        }
+        return new Date(parseInt(year), parseInt(month) - 1, d)
+          .toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+      }
+
       // Handle YYYY-MM format directly (monthly data)
       if (/^\d{4}-\d{2}$/.test(str)) {
         const [year, month] = str.split('-');
-        const date = new Date(parseInt(year), parseInt(month) - 1, 1);
-        return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        return new Date(parseInt(year), parseInt(month) - 1, 1)
+          .toLocaleDateString("en-US", { month: "short", year: "2-digit" });
       }
 
       try {
         const date = new Date(str);
         if (!isNaN(date.getTime())) {
-          // Check if it looks like monthly data (day is 1)
-          if (date.getDate() === 1) {
+          const day = date.getDate();
+          // If day is 1 or end of month (28-31), treat as monthly
+          if (day === 1 || day >= 28) {
             return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
           }
           return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
@@ -535,31 +557,49 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
                 <div className="px-4 pb-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Original */}
-                    <div>
+                    <div className="border rounded-lg p-3 bg-blue-50/30">
                       <p className="text-sm font-medium mb-2 text-center">Original Data ({analyzeSegment.originalData.length} points)</p>
                       <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={analyzeSegment.originalData}>
+                        <LineChart data={analyzeSegment.originalData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                           <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-                          <YAxis tick={{ fontSize: 9 }} domain={['auto', 'auto']} />
+                          <YAxis tick={{ fontSize: 9 }} domain={['dataMin', 'dataMax']} />
                           <Tooltip />
-                          <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} dot={false} name="Original" />
+                          <Line
+                            type="linear"
+                            dataKey="value"
+                            stroke="#3b82f6"
+                            strokeWidth={2}
+                            dot={false}
+                            connectNulls={true}
+                            isAnimationActive={false}
+                            name="Original"
+                          />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
                     {/* Transformed */}
-                    <div>
+                    <div className="border rounded-lg p-3 bg-green-50/30">
                       <p className="text-sm font-medium mb-2 text-center">
                         After Transformation ({analyzeSegment.transformedData.length} points)
                         {selectedTransformations.length === 0 && " - none applied"}
                       </p>
                       <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={analyzeSegment.transformedData}>
+                        <LineChart data={analyzeSegment.transformedData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                           <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-                          <YAxis tick={{ fontSize: 9 }} domain={['auto', 'auto']} />
+                          <YAxis tick={{ fontSize: 9 }} domain={['dataMin', 'dataMax']} />
                           <Tooltip />
-                          <Line type="monotone" dataKey="value" stroke="#22c55e" strokeWidth={2} dot={false} name="Transformed" />
+                          <Line
+                            type="linear"
+                            dataKey="value"
+                            stroke="#22c55e"
+                            strokeWidth={2}
+                            dot={false}
+                            connectNulls={true}
+                            isAnimationActive={false}
+                            name="Transformed"
+                          />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
