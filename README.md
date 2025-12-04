@@ -1,73 +1,111 @@
-# Welcome to your Lovable project
+# Prophet-Tune
 
-## Project info
+A professional-grade web application for advanced time series forecasting and model analysis. Configure and run Prophet and AutoGluon forecasting models with sophisticated hyperparameter tuning, data transformation analysis, and multi-segment forecasting with comprehensive performance metrics.
 
-**URL**: https://lovable.dev/projects/ed62032f-0139-413e-8b97-f33f96b112c0
+## Features
 
-## How can I edit this code?
+- **CSV Data Upload** - Drag-and-drop file upload with automatic column detection
+- **Multi-Segment Forecasting** - Handle different time series segments independently
+- **Multiple Models** - Support for Prophet, AutoGluon, ARIMA, AR, and ARMA
+- **AI-Powered Analysis** - Intelligent transformation recommendations (log, differencing, etc.)
+- **Hyperparameter Tuning** - Advanced Prophet parameter configuration
+- **Performance Metrics** - Calculate MAE, RMSE, MAPE, SMAPE, R², Adjusted R², Coverage, MASE
+- **Export Results** - Download forecasts in CSV, HTML, and PDF formats
 
-There are several ways of editing your application.
+## 9-Step Workflow
 
-**Use Lovable**
+1. **Upload** - Upload your time series CSV data
+2. **Model** - Select your forecasting model (Prophet/AutoGluon)
+3. **Variables** - Configure date, segment, and dependent variable columns
+4. **Segments** - Set up train/test splits and forecast periods
+5. **Analysis** - Run AI-powered data transformation analysis
+6. **Regressors** - Configure external regressor variables
+7. **Metrics** - Select which performance metrics to calculate
+8. **Parameters** - Fine-tune model hyperparameters
+9. **Results** - View forecasts, metrics, and export results
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/ed62032f-0139-413e-8b97-f33f96b112c0) and start prompting.
+## Tech Stack
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Frontend**: React 18, TypeScript, Vite
+- **Styling**: Tailwind CSS, shadcn-ui components
+- **Backend**: Supabase (Auth, Database, Edge Functions)
+- **Charts**: Recharts
+- **Forms**: React Hook Form + Zod validation
 
-**Use your preferred IDE**
+## Getting Started
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Prerequisites
+- Node.js 18+ (recommend using [nvm](https://github.com/nvm-sh/nvm))
+- npm or yarn
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Installation
 
-Follow these steps:
+```bash
+# Clone the repository
+git clone <repository-url>
+cd prophet-tune-new
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# Install dependencies
+npm install
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+The app will be available at `http://localhost:5173`
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Environment Variables
 
-**Use GitHub Codespaces**
+Create a `.env` file with:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```env
+VITE_SUPABASE_URL=<your-supabase-url>
+VITE_SUPABASE_PUBLISHABLE_KEY=<your-supabase-anon-key>
+VITE_SUPABASE_PROJECT_ID=<your-project-id>
+```
 
-## What technologies are used for this project?
+## Available Scripts
 
-This project is built with:
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start development server with HMR |
+| `npm run build` | Build for production |
+| `npm run build:dev` | Build for development |
+| `npm run lint` | Run ESLint |
+| `npm run preview` | Preview production build |
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Project Structure
 
-## How can I deploy this project?
+```
+src/
+├── pages/              # Route pages (Index, Auth, NotFound)
+├── components/
+│   ├── ui/            # shadcn-ui base components
+│   └── forecast/      # Domain-specific forecast components
+├── types/             # TypeScript type definitions
+├── utils/             # Utility functions
+├── hooks/             # Custom React hooks
+├── lib/               # Library utilities
+└── integrations/      # External service integrations
 
-Simply open [Lovable](https://lovable.dev/projects/ed62032f-0139-413e-8b97-f33f96b112c0) and click on Share -> Publish.
+supabase/
+├── functions/         # Deno edge functions
+└── migrations/        # Database migrations
+```
 
-## Can I connect a custom domain to my Lovable project?
+## Claude Code Integration
 
-Yes, you can!
+This project includes Claude Code configuration for AI-assisted development:
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+- `CLAUDE.md` - Project documentation for Claude
+- `.claude/settings.json` - Claude Code permissions
+- `.claude/commands/` - Custom slash commands:
+  - `/dev` - Start development server
+  - `/build` - Build the project
+  - `/lint` - Run linting
+  - `/add-component` - Guide for new components
+  - `/types` - Show type information
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## License
+
+Private project - All rights reserved.
