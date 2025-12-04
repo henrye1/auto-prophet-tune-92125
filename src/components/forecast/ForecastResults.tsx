@@ -123,11 +123,31 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
       if (t.type === "seasonal_difference") dateOffset += (t.parameters?.seasonalPeriod || 12);
     });
 
+    // Helper to format date for display
+    const formatDateStr = (dateVal: unknown): string => {
+      if (!dateVal) return '';
+      const str = String(dateVal);
+      try {
+        const date = new Date(str);
+        if (!isNaN(date.getTime())) {
+          // Check if it looks like monthly data (day is 1)
+          if (date.getDate() === 1) {
+            return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+          }
+          return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+        }
+      } catch {
+        // Fall through
+      }
+      // Return shortened version of original string
+      return str.length > 10 ? str.slice(0, 10) : str;
+    };
+
     // Original data
     const beforeData = values.map((val, i) => {
       const dateValue = originalData[i]?.[dateColumn];
       return {
-        date: dateValue ? String(dateValue).slice(0, 10) : `Point ${i + 1}`,
+        date: formatDateStr(dateValue) || `Point ${i + 1}`,
         value: val,
       };
     });
@@ -137,7 +157,7 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
       const dateIndex = Math.min(i + dateOffset, originalData.length - 1);
       const dateValue = originalData[dateIndex]?.[dateColumn];
       return {
-        date: dateValue ? String(dateValue).slice(0, 10) : `Point ${i + 1}`,
+        date: formatDateStr(dateValue) || `Point ${i + 1}`,
         value: Number.isFinite(val) ? val : 0,
       };
     });
@@ -150,9 +170,34 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
     return num.toFixed(decimals);
   };
 
+  // Detect if dates are monthly (all on day 1 or similar pattern)
+  const isMonthlyData = useMemo(() => {
+    if (!currentSegmentResult) return false;
+    const dates = currentSegmentResult.forecastData.slice(0, 10).map((p) => new Date(p.date));
+    // Check if all dates are on day 1 or if gaps are roughly monthly
+    const allDay1 = dates.every((d) => d.getDate() === 1);
+    if (allDay1) return true;
+    // Check if gaps are ~28-31 days
+    if (dates.length >= 2) {
+      const gaps = dates.slice(1).map((d, i) => (d.getTime() - dates[i].getTime()) / (1000 * 60 * 60 * 24));
+      const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+      return avgGap >= 25 && avgGap <= 35;
+    }
+    return false;
+  }, [currentSegmentResult]);
+
   const formatDate = (dateStr: string): string => {
     try {
       const date = new Date(dateStr);
+      if (isNaN(date.getTime())) {
+        // If not a valid date, return as-is (might be "2024-01" format)
+        return dateStr;
+      }
+      if (isMonthlyData) {
+        // For monthly data, show "Jan 24" format
+        return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+      }
+      // For daily/weekly data, show full date
       return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
     } catch {
       return dateStr;

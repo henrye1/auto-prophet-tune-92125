@@ -123,6 +123,18 @@ const Index: React.FC = () => {
     }
   };
 
+  // Helper to get date increment based on frequency
+  const getDateIncrement = (frequency: string): { unit: 'days' | 'months' | 'years', amount: number } => {
+    switch (frequency) {
+      case 'D': return { unit: 'days', amount: 1 };
+      case 'W': return { unit: 'days', amount: 7 };
+      case 'MS': return { unit: 'months', amount: 1 };
+      case 'QS': return { unit: 'months', amount: 3 };
+      case 'YS': return { unit: 'years', amount: 1 };
+      default: return { unit: 'months', amount: 1 };
+    }
+  };
+
   // Run forecast (mock implementation)
   const runForecast = async () => {
     setIsRunning(true);
@@ -131,44 +143,101 @@ const Index: React.FC = () => {
     // Simulate processing delay
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    // Generate mock results
+    // Generate mock results using actual data dates where possible
     const mockResults: ForecastResultsType = {
       timestamp: new Date().toISOString(),
       modelType: selectedModel,
-      segmentResults: segments.map((segment) => ({
-        segmentName: segment.segmentName,
-        frequency: segment.frequency,
-        forecastData: Array.from({ length: 50 }, (_, i) => {
-          const date = new Date();
-          date.setDate(date.getDate() - 50 + i);
-          const baseValue = 100 + Math.sin(i / 5) * 20;
-          const noise = Math.random() * 10 - 5;
-          return {
-            date: date.toISOString(),
-            actual: i < 40 ? baseValue + noise : null,
-            predicted: baseValue,
-            lowerBound: baseValue - 15,
-            upperBound: baseValue + 15,
-            isForecast: i >= 40,
-            isTestSet: i >= 30 && i < 40,
-          };
-        }),
-        metrics: selectedMetrics.map((metric) => ({
-          metric,
-          trainValue: Math.random() * 10,
-          testValue: Math.random() * 15,
-        })),
-        transformationsApplied: [],
-        modelConfig: { model: selectedModel },
-        trainStartDate: new Date(Date.now() - 50 * 24 * 60 * 60 * 1000).toISOString(),
-        trainEndDate: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-        testStartDate: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-        testEndDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-        forecastStartDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-        forecastEndDate: new Date().toISOString(),
-        aiCommentary:
-          "The model shows good fit to the training data with minimal overfitting. Seasonality patterns are well captured.",
-      })),
+      segmentResults: segments.map((segment) => {
+        // Get segment data
+        let segmentData = csvData;
+        if (segmentColumn && segment.segmentName !== "All Data") {
+          segmentData = csvData.filter(
+            (row) => String(row[segmentColumn]) === segment.segmentName
+          );
+        }
+
+        // Use actual dates from data
+        const actualDates = segmentData
+          .map((row) => String(row[dateColumn]))
+          .filter((d) => d && d !== "undefined");
+
+        const actualValues = segmentData
+          .map((row) => Number(row[dependentVariable]))
+          .filter((v) => !isNaN(v));
+
+        const dataLength = Math.min(actualDates.length, actualValues.length);
+        const trainEndIdx = Math.floor(dataLength * 0.8);
+        const testEndIdx = dataLength;
+
+        // Generate forecast dates based on frequency
+        const { unit, amount } = getDateIncrement(segment.frequency);
+        const lastDate = actualDates.length > 0 ? new Date(actualDates[actualDates.length - 1]) : new Date();
+        const forecastDates: string[] = [];
+        for (let i = 1; i <= 10; i++) {
+          const forecastDate = new Date(lastDate);
+          if (unit === 'days') {
+            forecastDate.setDate(forecastDate.getDate() + amount * i);
+          } else if (unit === 'months') {
+            forecastDate.setMonth(forecastDate.getMonth() + amount * i);
+          } else {
+            forecastDate.setFullYear(forecastDate.getFullYear() + amount * i);
+          }
+          forecastDates.push(forecastDate.toISOString());
+        }
+
+        // Build forecast data from actual data + forecast extension
+        const forecastData = [
+          // Historical data
+          ...actualDates.slice(0, dataLength).map((date, i) => {
+            const value = actualValues[i] || 0;
+            const noise = Math.random() * value * 0.05;
+            return {
+              date: date,
+              actual: value,
+              predicted: value + noise,
+              lowerBound: value * 0.9,
+              upperBound: value * 1.1,
+              isForecast: false,
+              isTestSet: i >= trainEndIdx,
+            };
+          }),
+          // Future forecast
+          ...forecastDates.map((date, i) => {
+            const lastValue = actualValues[actualValues.length - 1] || 100;
+            const trend = lastValue * (1 + 0.02 * (i + 1));
+            return {
+              date: date,
+              actual: null,
+              predicted: trend,
+              lowerBound: trend * 0.85,
+              upperBound: trend * 1.15,
+              isForecast: true,
+              isTestSet: false,
+            };
+          }),
+        ];
+
+        return {
+          segmentName: segment.segmentName,
+          frequency: segment.frequency,
+          forecastData,
+          metrics: selectedMetrics.map((metric) => ({
+            metric,
+            trainValue: Math.random() * 10,
+            testValue: Math.random() * 15,
+          })),
+          transformationsApplied: selectedTransformations.map((t) => t.type),
+          modelConfig: { model: selectedModel },
+          trainStartDate: actualDates[0] || new Date().toISOString(),
+          trainEndDate: actualDates[trainEndIdx - 1] || new Date().toISOString(),
+          testStartDate: actualDates[trainEndIdx] || new Date().toISOString(),
+          testEndDate: actualDates[testEndIdx - 1] || new Date().toISOString(),
+          forecastStartDate: forecastDates[0] || new Date().toISOString(),
+          forecastEndDate: forecastDates[forecastDates.length - 1] || new Date().toISOString(),
+          aiCommentary:
+            "The model shows good fit to the training data with minimal overfitting. Seasonality patterns are well captured.",
+        };
+      }),
     };
 
     setForecastResults(mockResults);

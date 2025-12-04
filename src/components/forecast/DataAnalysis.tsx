@@ -231,9 +231,28 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
     if (hasTrend) recommendations.push("difference");
     if (hasSeasonality) recommendations.push("seasonal_difference");
 
+    // Helper to format date for display
+    const formatDateStr = (dateVal: unknown): string => {
+      if (!dateVal) return '';
+      const str = String(dateVal);
+      try {
+        const date = new Date(str);
+        if (!isNaN(date.getTime())) {
+          // Check if it looks like monthly data (day is 1)
+          if (date.getDate() === 1) {
+            return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+          }
+          return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+        }
+      } catch {
+        // Fall through
+      }
+      return str.length > 10 ? str.slice(0, 10) : str;
+    };
+
     // Prepare time series data - use ALL data points
     const originalData = values.map((val, i) => ({
-      date: i < segmentData.length ? String(segmentData[i][dateColumn]).slice(0, 10) : `Point ${i + 1}`,
+      date: i < segmentData.length ? formatDateStr(segmentData[i][dateColumn]) || `Point ${i + 1}` : `Point ${i + 1}`,
       value: val,
     }));
 
@@ -254,7 +273,7 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
       ? transformedValues.map((v, i) => {
           const dateIndex = Math.min(i + dateOffset, segmentData.length - 1);
           const dateValue = segmentData[dateIndex]?.[dateColumn];
-          const dateStr = dateValue ? String(dateValue).slice(0, 10) : `Point ${i + 1}`;
+          const dateStr = formatDateStr(dateValue) || `Point ${i + 1}`;
           const numValue = Number(v);
           return {
             date: dateStr,
