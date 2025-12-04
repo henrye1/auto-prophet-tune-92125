@@ -9,6 +9,7 @@ import DataUpload from "@/components/forecast/DataUpload";
 import ModelSelector from "@/components/forecast/ModelSelector";
 import VariableConfig from "@/components/forecast/VariableConfig";
 import SegmentMapper from "@/components/forecast/SegmentMapper";
+import RegressorConfig from "@/components/forecast/RegressorConfig";
 import ProphetHyperparameters from "@/components/forecast/ProphetHyperparameters";
 import MetricsSelector from "@/components/forecast/MetricsSelector";
 import ForecastResults from "@/components/forecast/ForecastResults";
@@ -59,6 +60,7 @@ const Index: React.FC = () => {
     "mape",
     "r_squared",
   ]);
+  const [selectedRegressors, setSelectedRegressors] = useState<string[]>([]);
 
   // UI state
   const [activeTab, setActiveTab] = useState<WorkflowStep>("upload");
@@ -90,6 +92,7 @@ const Index: React.FC = () => {
     setSegmentColumn("");
     setDependentVariable("");
     setSegments([]);
+    setSelectedRegressors([]);
     setForecastResults(null);
   }, []);
 
@@ -310,21 +313,17 @@ const Index: React.FC = () => {
                 </div>
               </TabsContent>
 
-              {/* Step 6: Regressors (Placeholder) */}
+              {/* Step 6: Regressors */}
               <TabsContent value="regressors" className="mt-0">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>External Regressors</CardTitle>
-                    <CardDescription>
-                      Configure additional variables to improve forecasts
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-muted-foreground">
-                      Select columns to use as external regressors for your forecast model.
-                    </p>
-                  </CardContent>
-                </Card>
+                <RegressorConfig
+                  columns={columns}
+                  dateColumn={dateColumn}
+                  segmentColumn={segmentColumn}
+                  dependentVariable={dependentVariable}
+                  selectedRegressors={selectedRegressors}
+                  onRegressorsChange={setSelectedRegressors}
+                  data={csvData}
+                />
                 <div className="flex justify-end mt-4">
                   <Button onClick={goToNextStep}>Continue to Metrics</Button>
                 </div>
