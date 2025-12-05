@@ -440,6 +440,7 @@ const Index: React.FC = () => {
                     results={forecastResults}
                     originalData={csvData}
                     dateColumn={dateColumn}
+                    segmentColumn={segmentColumn}
                     dependentVariable={dependentVariable}
                     selectedTransformations={selectedTransformations}
                   />

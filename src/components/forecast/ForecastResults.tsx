@@ -35,6 +35,7 @@ interface ForecastResultsProps {
   // Props for transformation comparison
   originalData?: Record<string, unknown>[];
   dateColumn?: string;
+  segmentColumn?: string;
   dependentVariable?: string;
   selectedTransformations?: TransformationRecommendation[];
 }
@@ -44,6 +45,7 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
   onExport,
   originalData,
   dateColumn,
+  segmentColumn,
   dependentVariable,
   selectedTransformations,
 }) => {
@@ -103,7 +105,15 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
       return null;
     }
 
-    const values = originalData
+    // Filter data by selected segment
+    let segmentData = originalData;
+    if (segmentColumn && selectedSegment && selectedSegment !== "All Data") {
+      segmentData = originalData.filter(
+        (row) => String(row[segmentColumn]) === selectedSegment
+      );
+    }
+
+    const values = segmentData
       .map((row) => Number(row[dependentVariable]))
       .filter((v) => !isNaN(v));
 
@@ -169,19 +179,19 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
       return str.length > 10 ? str.slice(0, 10) : str;
     };
 
-    // Original data
+    // Original data - use segmentData for dates
     const beforeData = values.map((val, i) => {
-      const dateValue = originalData[i]?.[dateColumn];
+      const dateValue = segmentData[i]?.[dateColumn];
       return {
         date: formatDateStr(dateValue) || `Point ${i + 1}`,
         value: val,
       };
     });
 
-    // Transformed data
+    // Transformed data - use segmentData for dates
     const afterData = transformedValues.map((val, i) => {
-      const dateIndex = Math.min(i + dateOffset, originalData.length - 1);
-      const dateValue = originalData[dateIndex]?.[dateColumn];
+      const dateIndex = Math.min(i + dateOffset, segmentData.length - 1);
+      const dateValue = segmentData[dateIndex]?.[dateColumn];
       return {
         date: formatDateStr(dateValue) || `Point ${i + 1}`,
         value: Number.isFinite(val) ? val : 0,
@@ -189,7 +199,7 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
     });
 
     return { beforeData, afterData, hasTransformations: transformations.length > 0 };
-  }, [originalData, dateColumn, dependentVariable, selectedTransformations]);
+  }, [originalData, dateColumn, segmentColumn, selectedSegment, dependentVariable, selectedTransformations]);
 
   const formatNumber = (num: number | null, decimals = 2): string => {
     if (num === null || num === undefined) return "N/A";
