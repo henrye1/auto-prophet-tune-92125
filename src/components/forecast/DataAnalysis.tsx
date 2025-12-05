@@ -84,6 +84,267 @@ interface AnalysisResult {
 // Transformations that require positive values only
 const POSITIVE_ONLY_TRANSFORMS = ["log", "sqrt", "box_cox"];
 
+/**
+ * Augmented Dickey-Fuller Test Implementation
+ * Tests for unit root (non-stationarity) in a time series
+ */
+const adfTest = (values: number[], maxLag?: number): { adfStatistic: number; pValue: number; lagsUsed: number; nObs: number } => {
+  const n = values.length;
+  if (n < 12) {
+    return { adfStatistic: 0, pValue: 1, lagsUsed: 0, nObs: n };
+  }
+
+  // Determine optimal lag using AIC-like criterion (simplified)
+  // Default: use floor(12 * (n/100)^0.25) or maxLag if provided
+  const defaultMaxLag = Math.min(Math.floor(12 * Math.pow(n / 100, 0.25)), Math.floor((n - 1) / 2) - 2);
+  const lagLimit = maxLag ?? Math.max(1, defaultMaxLag);
+
+  // Calculate first differences
+  const diff: number[] = [];
+  for (let i = 1; i < n; i++) {
+    diff.push(values[i] - values[i - 1]);
+  }
+
+  // Build regression matrices for: Δy_t = α + β*y_{t-1} + Σγ_i*Δy_{t-i} + ε_t
+  // We need to find β's t-statistic
+
+  // Optimal lag selection using BIC
+  let bestLag = 1;
+  let bestBIC = Infinity;
+
+  for (let lag = 1; lag <= lagLimit; lag++) {
+    const startIdx = lag;
+    const usableN = diff.length - startIdx;
+
+    if (usableN < 10) continue;
+
+    // Build X matrix: [constant, y_{t-1}, Δy_{t-1}, Δy_{t-2}, ..., Δy_{t-lag}]
+    // Build Y vector: Δy_t
+
+    const Y: number[] = [];
+    const X: number[][] = [];
+
+    for (let t = startIdx; t < diff.length; t++) {
+      Y.push(diff[t]);
+
+      const row: number[] = [1, values[t]]; // constant and lagged level
+      for (let j = 1; j <= lag; j++) {
+        row.push(diff[t - j]); // lagged differences
+      }
+      X.push(row);
+    }
+
+    // OLS: β = (X'X)^(-1) X'Y
+    const k = X[0].length; // number of regressors
+    const nObs = Y.length;
+
+    // Compute X'X
+    const XtX: number[][] = Array(k).fill(null).map(() => Array(k).fill(0));
+    for (let i = 0; i < k; i++) {
+      for (let j = 0; j < k; j++) {
+        for (let t = 0; t < nObs; t++) {
+          XtX[i][j] += X[t][i] * X[t][j];
+        }
+      }
+    }
+
+    // Compute X'Y
+    const XtY: number[] = Array(k).fill(0);
+    for (let i = 0; i < k; i++) {
+      for (let t = 0; t < nObs; t++) {
+        XtY[i] += X[t][i] * Y[t];
+      }
+    }
+
+    // Invert X'X using Gaussian elimination
+    const XtXinv = invertMatrix(XtX);
+    if (!XtXinv) continue;
+
+    // Compute coefficients: β = (X'X)^(-1) X'Y
+    const beta: number[] = Array(k).fill(0);
+    for (let i = 0; i < k; i++) {
+      for (let j = 0; j < k; j++) {
+        beta[i] += XtXinv[i][j] * XtY[j];
+      }
+    }
+
+    // Compute residuals and SSR
+    let ssr = 0;
+    for (let t = 0; t < nObs; t++) {
+      let predicted = 0;
+      for (let i = 0; i < k; i++) {
+        predicted += X[t][i] * beta[i];
+      }
+      const residual = Y[t] - predicted;
+      ssr += residual * residual;
+    }
+
+    // BIC = n*ln(SSR/n) + k*ln(n)
+    const bic = nObs * Math.log(ssr / nObs) + k * Math.log(nObs);
+
+    if (bic < bestBIC) {
+      bestBIC = bic;
+      bestLag = lag;
+    }
+  }
+
+  // Run final regression with best lag
+  const startIdx = bestLag;
+  const Y: number[] = [];
+  const X: number[][] = [];
+
+  for (let t = startIdx; t < diff.length; t++) {
+    Y.push(diff[t]);
+    const row: number[] = [1, values[t]];
+    for (let j = 1; j <= bestLag; j++) {
+      row.push(diff[t - j]);
+    }
+    X.push(row);
+  }
+
+  const k = X[0].length;
+  const nObs = Y.length;
+
+  // Compute X'X
+  const XtX: number[][] = Array(k).fill(null).map(() => Array(k).fill(0));
+  for (let i = 0; i < k; i++) {
+    for (let j = 0; j < k; j++) {
+      for (let t = 0; t < nObs; t++) {
+        XtX[i][j] += X[t][i] * X[t][j];
+      }
+    }
+  }
+
+  // Compute X'Y
+  const XtY: number[] = Array(k).fill(0);
+  for (let i = 0; i < k; i++) {
+    for (let t = 0; t < nObs; t++) {
+      XtY[i] += X[t][i] * Y[t];
+    }
+  }
+
+  const XtXinv = invertMatrix(XtX);
+  if (!XtXinv) {
+    return { adfStatistic: 0, pValue: 1, lagsUsed: bestLag, nObs };
+  }
+
+  // Compute coefficients
+  const beta: number[] = Array(k).fill(0);
+  for (let i = 0; i < k; i++) {
+    for (let j = 0; j < k; j++) {
+      beta[i] += XtXinv[i][j] * XtY[j];
+    }
+  }
+
+  // Compute residual variance
+  let ssr = 0;
+  for (let t = 0; t < nObs; t++) {
+    let predicted = 0;
+    for (let i = 0; i < k; i++) {
+      predicted += X[t][i] * beta[i];
+    }
+    const residual = Y[t] - predicted;
+    ssr += residual * residual;
+  }
+
+  const s2 = ssr / (nObs - k); // residual variance
+  const seBeta = Math.sqrt(s2 * XtXinv[1][1]); // standard error of β (coefficient on y_{t-1})
+
+  // ADF statistic is t-statistic for β (coefficient on lagged level, index 1)
+  const adfStatistic = beta[1] / seBeta;
+
+  // Approximate p-value using MacKinnon critical values (for constant, no trend)
+  // Critical values: 1%: -3.43, 5%: -2.86, 10%: -2.57 (approximate for n=100)
+  // Using interpolation formula from MacKinnon (1994)
+  const pValue = approximateADFpValue(adfStatistic, nObs);
+
+  return { adfStatistic, pValue, lagsUsed: bestLag, nObs };
+};
+
+/**
+ * Matrix inversion using Gaussian elimination with partial pivoting
+ */
+const invertMatrix = (matrix: number[][]): number[][] | null => {
+  const n = matrix.length;
+  const aug: number[][] = matrix.map((row, i) => [...row, ...Array(n).fill(0).map((_, j) => (i === j ? 1 : 0))]);
+
+  // Forward elimination
+  for (let i = 0; i < n; i++) {
+    // Find pivot
+    let maxRow = i;
+    for (let k = i + 1; k < n; k++) {
+      if (Math.abs(aug[k][i]) > Math.abs(aug[maxRow][i])) {
+        maxRow = k;
+      }
+    }
+    [aug[i], aug[maxRow]] = [aug[maxRow], aug[i]];
+
+    if (Math.abs(aug[i][i]) < 1e-10) return null; // Singular matrix
+
+    // Scale pivot row
+    const scale = aug[i][i];
+    for (let j = 0; j < 2 * n; j++) {
+      aug[i][j] /= scale;
+    }
+
+    // Eliminate column
+    for (let k = 0; k < n; k++) {
+      if (k !== i) {
+        const factor = aug[k][i];
+        for (let j = 0; j < 2 * n; j++) {
+          aug[k][j] -= factor * aug[i][j];
+        }
+      }
+    }
+  }
+
+  return aug.map(row => row.slice(n));
+};
+
+/**
+ * Approximate p-value for ADF test using MacKinnon critical value regression
+ * Based on MacKinnon (1994) for case with constant, no trend
+ */
+const approximateADFpValue = (adfStat: number, nObs: number): number => {
+  // MacKinnon (1994) critical value approximation coefficients for constant, no trend
+  // tau_c critical values: c_p = c_inf + c_1/T + c_2/T^2
+  // Using regression coefficients for p-value approximation
+
+  // Critical values at different significance levels (asymptotic)
+  const criticalValues = [
+    { p: 0.01, cv: -3.43 },
+    { p: 0.05, cv: -2.86 },
+    { p: 0.10, cv: -2.57 },
+    { p: 0.25, cv: -1.94 },
+    { p: 0.50, cv: -0.76 },
+    { p: 0.75, cv: 0.37 },
+    { p: 0.90, cv: 1.30 },
+    { p: 0.95, cv: 1.73 },
+    { p: 0.99, cv: 2.50 },
+  ];
+
+  // Adjust critical values for sample size (small sample correction)
+  const T = nObs;
+  const adjustedCV = criticalValues.map(({ p, cv }) => ({
+    p,
+    cv: cv + (cv < 0 ? -1 : 1) * (1.5 / T + 2.8 / (T * T)) // Small sample adjustment
+  }));
+
+  // Interpolate p-value based on ADF statistic
+  if (adfStat <= adjustedCV[0].cv) return 0.001; // Very significant
+  if (adfStat >= adjustedCV[adjustedCV.length - 1].cv) return 0.999; // Not significant at all
+
+  // Linear interpolation
+  for (let i = 0; i < adjustedCV.length - 1; i++) {
+    if (adfStat >= adjustedCV[i].cv && adfStat <= adjustedCV[i + 1].cv) {
+      const ratio = (adfStat - adjustedCV[i].cv) / (adjustedCV[i + 1].cv - adjustedCV[i].cv);
+      return adjustedCV[i].p + ratio * (adjustedCV[i + 1].p - adjustedCV[i].p);
+    }
+  }
+
+  return 0.5; // Default
+};
+
 const DataAnalysis: React.FC<DataAnalysisProps> = ({
   data,
   dependentVariable,
@@ -278,11 +539,11 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
     const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values.length;
     const std = Math.sqrt(variance);
 
-    // Simulate ADF test for original
-    const trendStrength = Math.abs(values[values.length - 1] - values[0]) / std;
-    const simulatedPValue = Math.min(0.99, Math.max(0.01, 0.5 - trendStrength * 0.1 + Math.random() * 0.2));
-    const isStationary = simulatedPValue < 0.05;
-    const adfStatistic = -2.5 - (isStationary ? 1.5 : -0.5) + Math.random() * 0.5;
+    // Run proper ADF test for original data
+    const adfResult = adfTest(values);
+    const adfStatistic = adfResult.adfStatistic;
+    const pValue = adfResult.pValue;
+    const isStationary = pValue < 0.05;
 
     // Detect patterns
     const firstHalf = values.slice(0, Math.floor(values.length / 2));
@@ -400,29 +661,20 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
       : 0;
     const transformedStd = Math.sqrt(transformedVar);
 
-    // Calculate ADF for transformed data independently
+    // Run proper ADF test for transformed data
     let transformedAdf: number;
     let transformedPValue: number;
     let transformedIsStationary: boolean;
 
-    if (selectedTransformations.length > 0 && transformedValues.length >= 10) {
-      // Recalculate based on transformed data characteristics
-      const transformedTrendStrength = transformedStd > 0
-        ? Math.abs(transformedValues[transformedValues.length - 1] - transformedValues[0]) / transformedStd
-        : 0;
-
-      // Transformations generally improve stationarity
-      const improvementFactor = selectedTransformations.length * 0.15;
-      transformedPValue = Math.max(0.001, Math.min(0.5, simulatedPValue * (0.4 - improvementFactor)));
+    if (selectedTransformations.length > 0 && validTransformedValues.length >= 12) {
+      // Run ADF test on transformed data
+      const transformedAdfResult = adfTest(validTransformedValues);
+      transformedAdf = transformedAdfResult.adfStatistic;
+      transformedPValue = transformedAdfResult.pValue;
       transformedIsStationary = transformedPValue < 0.05;
-
-      // ADF statistic should be more negative (stronger) for stationary data
-      transformedAdf = transformedIsStationary
-        ? -3.5 - Math.random() * 0.5 - (selectedTransformations.length * 0.3)
-        : -2.0 - Math.random() * 0.5;
     } else {
-      // No transformations - same as original
-      transformedPValue = simulatedPValue;
+      // No transformations or insufficient data - same as original
+      transformedPValue = pValue;
       transformedIsStationary = isStationary;
       transformedAdf = adfStatistic;
     }
@@ -436,7 +688,7 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
       segmentName: selectedSegment,
       isStationary,
       adfStatistic,
-      pValue: simulatedPValue,
+      pValue,
       hasTrend,
       hasSeasonality,
       seasonalPeriod,
