@@ -470,17 +470,34 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
                     <h4 className="text-sm font-medium mb-2 text-center text-blue-700">Original Data (Before)</h4>
                     <div className="h-[250px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={transformationComparisonData.beforeData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                          <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-                          <YAxis tick={{ fontSize: 9 }} domain={['dataMin', 'dataMax']} />
-                          <Tooltip />
+                        <LineChart
+                          data={transformationComparisonData.beforeData}
+                          margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" />
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fontSize: 9, fill: '#6b7280' }}
+                            interval="preserveStartEnd"
+                            axisLine={{ stroke: '#9ca3af' }}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 9, fill: '#6b7280' }}
+                            width={60}
+                            axisLine={{ stroke: '#9ca3af' }}
+                            tickFormatter={(val) => typeof val === 'number' ? val.toFixed(2) : val}
+                          />
+                          <Tooltip
+                            formatter={(value: number) => [value?.toFixed(4), 'Value']}
+                            contentStyle={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}
+                          />
                           <Line
-                            type="linear"
+                            type="monotone"
                             dataKey="value"
-                            stroke="#3b82f6"
+                            stroke="#2563eb"
                             strokeWidth={2}
-                            dot={false}
+                            dot={{ r: 2, fill: '#2563eb', stroke: '#2563eb' }}
+                            activeDot={{ r: 4, fill: '#2563eb' }}
                             connectNulls={true}
                             isAnimationActive={false}
                             name="Original"
@@ -501,17 +518,34 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
                     </h4>
                     <div className="h-[250px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={transformationComparisonData.afterData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                          <XAxis dataKey="date" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-                          <YAxis tick={{ fontSize: 9 }} domain={['dataMin', 'dataMax']} />
-                          <Tooltip />
+                        <LineChart
+                          data={transformationComparisonData.afterData}
+                          margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" />
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fontSize: 9, fill: '#6b7280' }}
+                            interval="preserveStartEnd"
+                            axisLine={{ stroke: '#9ca3af' }}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 9, fill: '#6b7280' }}
+                            width={60}
+                            axisLine={{ stroke: '#9ca3af' }}
+                            tickFormatter={(val) => typeof val === 'number' ? val.toFixed(2) : val}
+                          />
+                          <Tooltip
+                            formatter={(value: number) => [value?.toFixed(4), 'Value']}
+                            contentStyle={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}
+                          />
                           <Line
-                            type="linear"
+                            type="monotone"
                             dataKey="value"
-                            stroke="#22c55e"
+                            stroke="#16a34a"
                             strokeWidth={2}
-                            dot={false}
+                            dot={{ r: 2, fill: '#16a34a', stroke: '#16a34a' }}
+                            activeDot={{ r: 4, fill: '#16a34a' }}
                             connectNulls={true}
                             isAnimationActive={false}
                             name="Transformed"
