@@ -64,6 +64,8 @@ interface AnalysisResult {
   isStationary: boolean;
   adfStatistic: number;
   pValue: number;
+  lagsUsed: number;
+  nObs: number;
   hasTrend: boolean;
   hasSeasonality: boolean;
   seasonalPeriod: number;
@@ -78,7 +80,7 @@ interface AnalysisResult {
   pacfBefore: { lag: number; value: number }[];
   acfAfter: { lag: number; value: number }[];
   pacfAfter: { lag: number; value: number }[];
-  transformedStats: { isStationary: boolean; adfStatistic: number; pValue: number; mean: number; std: number };
+  transformedStats: { isStationary: boolean; adfStatistic: number; pValue: number; lagsUsed: number; nObs: number; mean: number; std: number };
 }
 
 // Transformations that require positive values only
@@ -95,15 +97,19 @@ const adfTest = (values: number[], maxLag?: number): { adfStatistic: number; pVa
     return { adfStatistic: 0, pValue: 1, lagsUsed: 0, nObs: n };
   }
 
-  // Match statsmodels maxlag formula: int(ceil(12 * (nobs/100)^0.25))
-  const defaultMaxLag = Math.ceil(12 * Math.pow(n / 100, 0.25));
-  const lagLimit = maxLag ?? Math.min(defaultMaxLag, Math.floor(n / 2) - 2);
-
-  // Calculate first differences: diff[i] = values[i+1] - values[i]
+  // Calculate first differences: diff[i] = y[i+1] - y[i] = Δy_{i+1}
   const diff: number[] = [];
   for (let i = 1; i < n; i++) {
     diff.push(values[i] - values[i - 1]);
   }
+
+  // nobs for maxlag calculation should be len(diff) per statsmodels
+  const nDiff = diff.length;
+
+  // Match statsmodels maxlag formula: int(ceil(12 * (nobs/100)^0.25))
+  // where nobs = len(x) - 1 (after differencing)
+  const defaultMaxLag = Math.ceil(12 * Math.pow(nDiff / 100, 0.25));
+  const lagLimit = maxLag ?? Math.min(defaultMaxLag, Math.floor(nDiff / 2) - 1);
 
   // Build regression matrices for: Δy_t = α + β*y_{t-1} + Σγ_i*Δy_{t-i} + ε_t
   // We need to find β's t-statistic
@@ -114,50 +120,55 @@ const adfTest = (values: number[], maxLag?: number): { adfStatistic: number; pVa
 
   // Test lags from 0 to lagLimit (statsmodels includes lag=0)
   for (let lag = 0; lag <= lagLimit; lag++) {
+    // With lag lagged differences, we lose 'lag' observations from the start
     const startIdx = lag;
-    const usableN = diff.length - startIdx;
+    const usableN = nDiff - startIdx;
 
     if (usableN < 10) continue;
 
     // Build X matrix: [constant, y_{t-1}, Δy_{t-1}, Δy_{t-2}, ..., Δy_{t-lag}]
     // Build Y vector: Δy_t
-    // For diff[t], the lagged level is values[t] (which is y_t, one period before diff[t] = y_{t+1} - y_t)
+    //
+    // At array index i in diff[], we have diff[i] = values[i+1] - values[i] = Δy_{i+1}
+    // So for diff[i] as dependent variable (representing Δy_{i+1}):
+    // - The lagged level y_{i} = values[i]  (y at time i, which is y_{t-1} where t=i+1)
+    // - Lagged differences: diff[i-1] = Δy_i, diff[i-2] = Δy_{i-1}, etc.
 
     const Y: number[] = [];
     const X: number[][] = [];
 
-    for (let t = startIdx; t < diff.length; t++) {
-      Y.push(diff[t]);
+    for (let i = startIdx; i < nDiff; i++) {
+      Y.push(diff[i]);  // Δy_{i+1}
 
-      // constant and lagged level y_{t-1} = values[t] since diff[t] = y_{t+1} - y_t
-      const row: number[] = [1, values[t]];
+      // constant and lagged level: values[i] is y_i, which is y_{t-1} where t = i+1
+      const row: number[] = [1, values[i]];
 
-      // lagged differences
+      // lagged differences: diff[i-j] = Δy_{i+1-j}
       for (let j = 1; j <= lag; j++) {
-        row.push(diff[t - j]);
+        row.push(diff[i - j]);
       }
       X.push(row);
     }
 
     // OLS: β = (X'X)^(-1) X'Y
     const k = X[0].length; // number of regressors
-    const nObs = Y.length;
+    const obsCount = Y.length;
 
     // Compute X'X
     const XtX: number[][] = Array(k).fill(null).map(() => Array(k).fill(0));
-    for (let i = 0; i < k; i++) {
-      for (let j = 0; j < k; j++) {
-        for (let t = 0; t < nObs; t++) {
-          XtX[i][j] += X[t][i] * X[t][j];
+    for (let ii = 0; ii < k; ii++) {
+      for (let jj = 0; jj < k; jj++) {
+        for (let t = 0; t < obsCount; t++) {
+          XtX[ii][jj] += X[t][ii] * X[t][jj];
         }
       }
     }
 
     // Compute X'Y
     const XtY: number[] = Array(k).fill(0);
-    for (let i = 0; i < k; i++) {
-      for (let t = 0; t < nObs; t++) {
-        XtY[i] += X[t][i] * Y[t];
+    for (let ii = 0; ii < k; ii++) {
+      for (let t = 0; t < obsCount; t++) {
+        XtY[ii] += X[t][ii] * Y[t];
       }
     }
 
@@ -167,25 +178,25 @@ const adfTest = (values: number[], maxLag?: number): { adfStatistic: number; pVa
 
     // Compute coefficients: β = (X'X)^(-1) X'Y
     const beta: number[] = Array(k).fill(0);
-    for (let i = 0; i < k; i++) {
-      for (let j = 0; j < k; j++) {
-        beta[i] += XtXinv[i][j] * XtY[j];
+    for (let ii = 0; ii < k; ii++) {
+      for (let jj = 0; jj < k; jj++) {
+        beta[ii] += XtXinv[ii][jj] * XtY[jj];
       }
     }
 
     // Compute residuals and SSR
     let ssr = 0;
-    for (let t = 0; t < nObs; t++) {
+    for (let t = 0; t < obsCount; t++) {
       let predicted = 0;
-      for (let i = 0; i < k; i++) {
-        predicted += X[t][i] * beta[i];
+      for (let ii = 0; ii < k; ii++) {
+        predicted += X[t][ii] * beta[ii];
       }
       const residual = Y[t] - predicted;
       ssr += residual * residual;
     }
 
     // AIC = n*ln(SSR/n) + 2*k (statsmodels uses this for lag selection)
-    const aic = nObs * Math.log(ssr / nObs) + 2 * k;
+    const aic = obsCount * Math.log(ssr / obsCount) + 2 * k;
 
     if (aic < bestAIC) {
       bestAIC = aic;
@@ -198,11 +209,11 @@ const adfTest = (values: number[], maxLag?: number): { adfStatistic: number; pVa
   const Y: number[] = [];
   const X: number[][] = [];
 
-  for (let t = startIdx; t < diff.length; t++) {
-    Y.push(diff[t]);
-    const row: number[] = [1, values[t]];
+  for (let i = startIdx; i < nDiff; i++) {
+    Y.push(diff[i]);
+    const row: number[] = [1, values[i]];
     for (let j = 1; j <= bestLag; j++) {
-      row.push(diff[t - j]);
+      row.push(diff[i - j]);
     }
     X.push(row);
   }
@@ -212,19 +223,19 @@ const adfTest = (values: number[], maxLag?: number): { adfStatistic: number; pVa
 
   // Compute X'X
   const XtX: number[][] = Array(k).fill(null).map(() => Array(k).fill(0));
-  for (let i = 0; i < k; i++) {
-    for (let j = 0; j < k; j++) {
+  for (let ii = 0; ii < k; ii++) {
+    for (let jj = 0; jj < k; jj++) {
       for (let t = 0; t < nObs; t++) {
-        XtX[i][j] += X[t][i] * X[t][j];
+        XtX[ii][jj] += X[t][ii] * X[t][jj];
       }
     }
   }
 
   // Compute X'Y
   const XtY: number[] = Array(k).fill(0);
-  for (let i = 0; i < k; i++) {
+  for (let ii = 0; ii < k; ii++) {
     for (let t = 0; t < nObs; t++) {
-      XtY[i] += X[t][i] * Y[t];
+      XtY[ii] += X[t][ii] * Y[t];
     }
   }
 
@@ -235,9 +246,9 @@ const adfTest = (values: number[], maxLag?: number): { adfStatistic: number; pVa
 
   // Compute coefficients
   const beta: number[] = Array(k).fill(0);
-  for (let i = 0; i < k; i++) {
-    for (let j = 0; j < k; j++) {
-      beta[i] += XtXinv[i][j] * XtY[j];
+  for (let ii = 0; ii < k; ii++) {
+    for (let jj = 0; jj < k; jj++) {
+      beta[ii] += XtXinv[ii][jj] * XtY[jj];
     }
   }
 
@@ -245,8 +256,8 @@ const adfTest = (values: number[], maxLag?: number): { adfStatistic: number; pVa
   let ssr = 0;
   for (let t = 0; t < nObs; t++) {
     let predicted = 0;
-    for (let i = 0; i < k; i++) {
-      predicted += X[t][i] * beta[i];
+    for (let ii = 0; ii < k; ii++) {
+      predicted += X[t][ii] * beta[ii];
     }
     const residual = Y[t] - predicted;
     ssr += residual * residual;
@@ -681,6 +692,8 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
     let transformedAdf: number;
     let transformedPValue: number;
     let transformedIsStationary: boolean;
+    let transformedLagsUsed: number;
+    let transformedNObs: number;
 
     if (selectedTransformations.length > 0 && validTransformedValues.length >= 12) {
       // Run ADF test on transformed data
@@ -688,11 +701,15 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
       transformedAdf = transformedAdfResult.adfStatistic;
       transformedPValue = transformedAdfResult.pValue;
       transformedIsStationary = transformedPValue < 0.05;
+      transformedLagsUsed = transformedAdfResult.lagsUsed;
+      transformedNObs = transformedAdfResult.nObs;
     } else {
       // No transformations or insufficient data - same as original
       transformedPValue = pValue;
       transformedIsStationary = isStationary;
       transformedAdf = adfStatistic;
+      transformedLagsUsed = adfResult.lagsUsed;
+      transformedNObs = adfResult.nObs;
     }
 
     // ARIMA suggestions
@@ -705,6 +722,8 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
       isStationary,
       adfStatistic,
       pValue,
+      lagsUsed: adfResult.lagsUsed,
+      nObs: adfResult.nObs,
       hasTrend,
       hasSeasonality,
       seasonalPeriod,
@@ -723,6 +742,8 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
         isStationary: transformedIsStationary,
         adfStatistic: transformedAdf,
         pValue: transformedPValue,
+        lagsUsed: transformedLagsUsed,
+        nObs: transformedNObs,
         mean: transformedMean,
         std: transformedStd,
       },
@@ -1050,6 +1071,8 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         <div><span className="text-muted-foreground">ADF:</span> {analyzeSegment.adfStatistic.toFixed(3)}</div>
                         <div><span className="text-muted-foreground">P-Value:</span> {analyzeSegment.pValue.toFixed(4)}</div>
+                        <div><span className="text-muted-foreground">Lags Used:</span> {analyzeSegment.lagsUsed}</div>
+                        <div><span className="text-muted-foreground">nObs:</span> {analyzeSegment.nObs}</div>
                         <div><span className="text-muted-foreground">Mean:</span> {analyzeSegment.mean.toFixed(2)}</div>
                         <div><span className="text-muted-foreground">Std:</span> {analyzeSegment.std.toFixed(2)}</div>
                       </div>
@@ -1068,6 +1091,8 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         <div><span className="text-muted-foreground">ADF:</span> {analyzeSegment.transformedStats.adfStatistic.toFixed(3)}</div>
                         <div><span className="text-muted-foreground">P-Value:</span> {analyzeSegment.transformedStats.pValue.toFixed(4)}</div>
+                        <div><span className="text-muted-foreground">Lags Used:</span> {analyzeSegment.transformedStats.lagsUsed}</div>
+                        <div><span className="text-muted-foreground">nObs:</span> {analyzeSegment.transformedStats.nObs}</div>
                         <div><span className="text-muted-foreground">Mean:</span> {analyzeSegment.transformedStats.mean.toFixed(2)}</div>
                         <div><span className="text-muted-foreground">Std:</span> {analyzeSegment.transformedStats.std.toFixed(2)}</div>
                       </div>
