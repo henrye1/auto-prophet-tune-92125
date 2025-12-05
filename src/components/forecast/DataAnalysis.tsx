@@ -89,190 +89,140 @@ const POSITIVE_ONLY_TRANSFORMS = ["log", "sqrt", "box_cox"];
 /**
  * Augmented Dickey-Fuller Test Implementation
  * Tests for unit root (non-stationarity) in a time series
- * Matches statsmodels adfuller with autolag='AIC' and regression='c'
+ * Rewritten to match statsmodels adfuller with autolag='AIC' and regression='c'
+ *
+ * The regression is: Δy_t = α + γ*y_{t-1} + Σβ_i*Δy_{t-i} + ε_t
+ * ADF statistic is the t-statistic for γ (the coefficient on the lagged level)
  */
 const adfTest = (values: number[], maxLag?: number): { adfStatistic: number; pValue: number; lagsUsed: number; nObs: number } => {
   const n = values.length;
-  if (n < 12) {
+  if (n < 20) {
     return { adfStatistic: 0, pValue: 1, lagsUsed: 0, nObs: n };
   }
 
-  // Calculate first differences: diff[i] = y[i+1] - y[i] = Δy_{i+1}
-  const diff: number[] = [];
-  for (let i = 1; i < n; i++) {
-    diff.push(values[i] - values[i - 1]);
-  }
-
-  // nobs for maxlag calculation should be len(diff) per statsmodels
-  const nDiff = diff.length;
-
   // Match statsmodels maxlag formula: int(ceil(12 * (nobs/100)^0.25))
-  // where nobs = len(x) - 1 (after differencing)
-  const defaultMaxLag = Math.ceil(12 * Math.pow(nDiff / 100, 0.25));
-  const lagLimit = maxLag ?? Math.min(defaultMaxLag, Math.floor(nDiff / 2) - 1);
+  // nobs here is the length of the original series
+  const defaultMaxLag = Math.ceil(12 * Math.pow(n / 100, 0.25));
+  const lagLimit = maxLag ?? Math.min(defaultMaxLag, Math.floor((n - 1) / 2) - 1);
 
-  // Build regression matrices for: Δy_t = α + β*y_{t-1} + Σγ_i*Δy_{t-i} + ε_t
-  // We need to find β's t-statistic
+  // Helper function to run OLS and get ADF statistic for a given lag
+  const runADFRegression = (lag: number): { adf: number; aic: number; nObs: number; se: number; coef: number } | null => {
+    // We need at least lag+1 observations for lagged differences plus some for regression
+    const startT = lag + 1; // First usable time index (0-indexed in original series)
+    const endT = n - 1; // Last usable time index
+    const nObs = endT - startT + 1;
 
-  // Optimal lag selection using AIC (matching statsmodels default)
-  let bestLag = 0;
-  let bestAIC = Infinity;
+    if (nObs < 10) return null;
 
-  // Test lags from 0 to lagLimit (statsmodels includes lag=0)
-  for (let lag = 0; lag <= lagLimit; lag++) {
-    // With lag lagged differences, we lose 'lag' observations from the start
-    const startIdx = lag;
-    const usableN = nDiff - startIdx;
-
-    if (usableN < 10) continue;
-
-    // Build X matrix: [constant, y_{t-1}, Δy_{t-1}, Δy_{t-2}, ..., Δy_{t-lag}]
-    // Build Y vector: Δy_t
-    //
-    // At array index i in diff[], we have diff[i] = values[i+1] - values[i] = Δy_{i+1}
-    // So for diff[i] as dependent variable (representing Δy_{i+1}):
-    // - The lagged level y_{i} = values[i]  (y at time i, which is y_{t-1} where t=i+1)
-    // - Lagged differences: diff[i-1] = Δy_i, diff[i-2] = Δy_{i-1}, etc.
+    // Build regression matrices
+    // Dependent variable: Δy_t = y_t - y_{t-1} for t = startT to endT
+    // Regressors: [1, y_{t-1}, Δy_{t-1}, Δy_{t-2}, ..., Δy_{t-lag}]
 
     const Y: number[] = [];
     const X: number[][] = [];
 
-    for (let i = startIdx; i < nDiff; i++) {
-      Y.push(diff[i]);  // Δy_{i+1}
+    for (let t = startT; t <= endT; t++) {
+      // Dependent variable: Δy_t = y_t - y_{t-1}
+      const deltaY = values[t] - values[t - 1];
+      Y.push(deltaY);
 
-      // constant and lagged level: values[i] is y_i, which is y_{t-1} where t = i+1
-      const row: number[] = [1, values[i]];
+      // Regressors
+      const row: number[] = [1]; // constant
+      row.push(values[t - 1]); // lagged level y_{t-1}
 
-      // lagged differences: diff[i-j] = Δy_{i+1-j}
+      // Lagged differences: Δy_{t-1}, Δy_{t-2}, ..., Δy_{t-lag}
       for (let j = 1; j <= lag; j++) {
-        row.push(diff[i - j]);
+        const laggedDiff = values[t - j] - values[t - j - 1];
+        row.push(laggedDiff);
       }
+
       X.push(row);
     }
 
-    // OLS: β = (X'X)^(-1) X'Y
-    const k = X[0].length; // number of regressors
-    const obsCount = Y.length;
+    const k = X[0].length; // number of regressors: 2 + lag
 
+    // OLS: β = (X'X)^(-1) X'Y
     // Compute X'X
     const XtX: number[][] = Array(k).fill(null).map(() => Array(k).fill(0));
-    for (let ii = 0; ii < k; ii++) {
-      for (let jj = 0; jj < k; jj++) {
-        for (let t = 0; t < obsCount; t++) {
-          XtX[ii][jj] += X[t][ii] * X[t][jj];
+    for (let i = 0; i < k; i++) {
+      for (let j = 0; j < k; j++) {
+        for (let t = 0; t < nObs; t++) {
+          XtX[i][j] += X[t][i] * X[t][j];
         }
       }
     }
 
     // Compute X'Y
     const XtY: number[] = Array(k).fill(0);
-    for (let ii = 0; ii < k; ii++) {
-      for (let t = 0; t < obsCount; t++) {
-        XtY[ii] += X[t][ii] * Y[t];
+    for (let i = 0; i < k; i++) {
+      for (let t = 0; t < nObs; t++) {
+        XtY[i] += X[t][i] * Y[t];
       }
     }
 
-    // Invert X'X using Gaussian elimination
+    // Invert X'X
     const XtXinv = invertMatrix(XtX);
-    if (!XtXinv) continue;
+    if (!XtXinv) return null;
 
-    // Compute coefficients: β = (X'X)^(-1) X'Y
+    // Compute coefficients
     const beta: number[] = Array(k).fill(0);
-    for (let ii = 0; ii < k; ii++) {
-      for (let jj = 0; jj < k; jj++) {
-        beta[ii] += XtXinv[ii][jj] * XtY[jj];
+    for (let i = 0; i < k; i++) {
+      for (let j = 0; j < k; j++) {
+        beta[i] += XtXinv[i][j] * XtY[j];
       }
     }
 
-    // Compute residuals and SSR
+    // Compute SSR (sum of squared residuals)
     let ssr = 0;
-    for (let t = 0; t < obsCount; t++) {
+    for (let t = 0; t < nObs; t++) {
       let predicted = 0;
-      for (let ii = 0; ii < k; ii++) {
-        predicted += X[t][ii] * beta[ii];
+      for (let i = 0; i < k; i++) {
+        predicted += X[t][i] * beta[i];
       }
       const residual = Y[t] - predicted;
       ssr += residual * residual;
     }
 
-    // AIC = n*ln(SSR/n) + 2*k (statsmodels uses this for lag selection)
-    const aic = obsCount * Math.log(ssr / obsCount) + 2 * k;
+    // Residual variance (unbiased)
+    const s2 = ssr / (nObs - k);
 
-    if (aic < bestAIC) {
-      bestAIC = aic;
+    // Standard error of the coefficient on y_{t-1} (index 1)
+    const seGamma = Math.sqrt(s2 * XtXinv[1][1]);
+
+    // ADF statistic: t-statistic for γ (coefficient on lagged level)
+    const adfStat = beta[1] / seGamma;
+
+    // AIC for lag selection: n*ln(SSR/n) + 2*k
+    const aic = nObs * Math.log(ssr / nObs) + 2 * k;
+
+    return { adf: adfStat, aic, nObs, se: seGamma, coef: beta[1] };
+  };
+
+  // Find optimal lag using AIC
+  let bestLag = 0;
+  let bestResult = runADFRegression(0);
+
+  if (!bestResult) {
+    return { adfStatistic: 0, pValue: 1, lagsUsed: 0, nObs: n };
+  }
+
+  for (let lag = 1; lag <= lagLimit; lag++) {
+    const result = runADFRegression(lag);
+    if (result && result.aic < bestResult.aic) {
+      bestResult = result;
       bestLag = lag;
     }
   }
 
-  // Run final regression with best lag
-  const startIdx = bestLag;
-  const Y: number[] = [];
-  const X: number[][] = [];
-
-  for (let i = startIdx; i < nDiff; i++) {
-    Y.push(diff[i]);
-    const row: number[] = [1, values[i]];
-    for (let j = 1; j <= bestLag; j++) {
-      row.push(diff[i - j]);
-    }
-    X.push(row);
-  }
-
-  const k = X[0].length;
-  const nObs = Y.length;
-
-  // Compute X'X
-  const XtX: number[][] = Array(k).fill(null).map(() => Array(k).fill(0));
-  for (let ii = 0; ii < k; ii++) {
-    for (let jj = 0; jj < k; jj++) {
-      for (let t = 0; t < nObs; t++) {
-        XtX[ii][jj] += X[t][ii] * X[t][jj];
-      }
-    }
-  }
-
-  // Compute X'Y
-  const XtY: number[] = Array(k).fill(0);
-  for (let ii = 0; ii < k; ii++) {
-    for (let t = 0; t < nObs; t++) {
-      XtY[ii] += X[t][ii] * Y[t];
-    }
-  }
-
-  const XtXinv = invertMatrix(XtX);
-  if (!XtXinv) {
-    return { adfStatistic: 0, pValue: 1, lagsUsed: bestLag, nObs };
-  }
-
-  // Compute coefficients
-  const beta: number[] = Array(k).fill(0);
-  for (let ii = 0; ii < k; ii++) {
-    for (let jj = 0; jj < k; jj++) {
-      beta[ii] += XtXinv[ii][jj] * XtY[jj];
-    }
-  }
-
-  // Compute residual variance
-  let ssr = 0;
-  for (let t = 0; t < nObs; t++) {
-    let predicted = 0;
-    for (let ii = 0; ii < k; ii++) {
-      predicted += X[t][ii] * beta[ii];
-    }
-    const residual = Y[t] - predicted;
-    ssr += residual * residual;
-  }
-
-  const s2 = ssr / (nObs - k); // residual variance
-  const seBeta = Math.sqrt(s2 * XtXinv[1][1]); // standard error of β (coefficient on y_{t-1})
-
-  // ADF statistic is t-statistic for β (coefficient on lagged level, index 1)
-  const adfStatistic = beta[1] / seBeta;
-
   // Approximate p-value using MacKinnon critical values
-  const pValue = approximateADFpValue(adfStatistic, nObs);
+  const pValue = approximateADFpValue(bestResult.adf, bestResult.nObs);
 
-  return { adfStatistic, pValue, lagsUsed: bestLag, nObs };
+  return {
+    adfStatistic: bestResult.adf,
+    pValue,
+    lagsUsed: bestLag,
+    nObs: bestResult.nObs
+  };
 };
 
 /**
