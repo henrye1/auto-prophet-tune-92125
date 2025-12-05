@@ -57,6 +57,7 @@ const ALL_TRANSFORMATIONS: TransformationRecommendation[] = [
   { type: "seasonal_difference", reason: "Remove seasonal patterns by differencing at lag S", priority: 3, parameters: { seasonalPeriod: 12 } },
   { type: "sqrt", reason: "Mild variance stabilization for count data", priority: 4, parameters: {} },
   { type: "box_cox", reason: "Optimal power transformation for normality", priority: 5, parameters: { lambda: 0.5 } },
+  { type: "standardize", reason: "Convert to z-scores (mean=0, std=1) for scale normalization", priority: 6, parameters: {} },
 ];
 
 interface AnalysisResult {
@@ -460,6 +461,15 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
             result = result.map((v) => (v > 0 ? (Math.pow(v, lambda) - 1) / lambda : 0));
           }
           break;
+        case "standardize":
+          // Z-score standardization: (x - mean) / std
+          const mean = result.reduce((a, b) => a + b, 0) / result.length;
+          const variance = result.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / result.length;
+          const std = Math.sqrt(variance);
+          if (std > 0) {
+            result = result.map((v) => (v - mean) / std);
+          }
+          break;
       }
     });
 
@@ -740,6 +750,7 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
       seasonal_difference: "Seasonal Difference",
       sqrt: "Square Root",
       box_cox: "Box-Cox Transform",
+      standardize: "Standardize (Z-Score)",
       none: "No Transform",
     };
     return labels[type] || type;

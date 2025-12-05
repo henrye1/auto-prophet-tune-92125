@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -24,6 +25,7 @@ export interface RegressorSettings {
   priorScale: number;
   mode: "additive" | "multiplicative";
   leadLag: number;
+  standardize: boolean;
 }
 
 interface RegressorConfigProps {
@@ -94,6 +96,7 @@ const RegressorConfig: React.FC<RegressorConfigProps> = ({
       priorScale: 10,
       mode: "additive",
       leadLag: 0,
+      standardize: false,
     };
 
     onRegressorsChange([...selectedRegressors, newRegressor]);
@@ -319,6 +322,28 @@ const RegressorConfig: React.FC<RegressorConfigProps> = ({
                         </p>
                       </div>
                     </div>
+
+                    {/* Standardize Option */}
+                    <div className="flex items-center gap-3 pt-2 border-t">
+                      <Checkbox
+                        id={`standardize-${regressor.name}`}
+                        checked={regressor.standardize}
+                        onCheckedChange={(checked) =>
+                          handleUpdateRegressor(regressor.name, { standardize: checked === true })
+                        }
+                      />
+                      <div className="flex-1">
+                        <Label
+                          htmlFor={`standardize-${regressor.name}`}
+                          className="text-sm font-medium cursor-pointer"
+                        >
+                          Standardize (Z-Score)
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Convert to z-scores (mean=0, std=1) before using as regressor
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
@@ -341,6 +366,7 @@ const RegressorConfig: React.FC<RegressorConfigProps> = ({
               <li><strong>Prior Scale:</strong> Higher values allow more flexibility; lower values regularize</li>
               <li><strong>Mode:</strong> Additive for constant effects; Multiplicative for proportional effects</li>
               <li><strong>Lead/Lag:</strong> Negative = lagged effect (past affects present); Positive = leading indicator</li>
+              <li><strong>Standardize:</strong> Converts values to z-scores; useful when regressors have different scales</li>
               <li>Regressors must have known future values for forecasting</li>
             </ul>
           </div>

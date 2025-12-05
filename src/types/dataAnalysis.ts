@@ -19,7 +19,7 @@ export interface AutocorrelationResult {
 
 // Transformation recommendation
 export interface TransformationRecommendation {
-  type: "log" | "difference" | "seasonal_difference" | "sqrt" | "box_cox" | "none";
+  type: "log" | "difference" | "seasonal_difference" | "sqrt" | "box_cox" | "standardize" | "none";
   reason: string;
   priority: number;
   parameters?: {
