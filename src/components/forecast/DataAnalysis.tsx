@@ -81,6 +81,9 @@ interface AnalysisResult {
   transformedStats: { isStationary: boolean; adfStatistic: number; pValue: number; mean: number; std: number };
 }
 
+// Transformations that require positive values only
+const POSITIVE_ONLY_TRANSFORMS = ["log", "sqrt", "box_cox"];
+
 const DataAnalysis: React.FC<DataAnalysisProps> = ({
   data,
   dependentVariable,
@@ -102,6 +105,74 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
     transformations: true,
     arima: true,
   });
+
+  // Check if data contains negative or zero values
+  const dataValueInfo = useMemo(() => {
+    if (!dependentVariable || data.length === 0) {
+      return { hasNegative: false, hasZero: false, minValue: 0 };
+    }
+
+    // Filter by segment if applicable
+    let segmentData = data;
+    if (segmentColumn && selectedSegment !== "All Data") {
+      segmentData = data.filter(
+        (row) => String(row[segmentColumn]) === selectedSegment
+      );
+    }
+
+    const values = segmentData
+      .map((row) => Number(row[dependentVariable]))
+      .filter((v) => !isNaN(v));
+
+    if (values.length === 0) {
+      return { hasNegative: false, hasZero: false, minValue: 0 };
+    }
+
+    const minValue = Math.min(...values);
+    const hasNegative = minValue < 0;
+    const hasZero = values.some((v) => v === 0);
+
+    return { hasNegative, hasZero, minValue };
+  }, [data, dependentVariable, segmentColumn, selectedSegment]);
+
+  // Check if a transformation is disabled due to data constraints
+  const isTransformDisabled = (transformType: string): boolean => {
+    if (POSITIVE_ONLY_TRANSFORMS.includes(transformType)) {
+      // Log requires strictly positive (> 0)
+      if (transformType === "log") {
+        return dataValueInfo.hasNegative || dataValueInfo.hasZero;
+      }
+      // Sqrt requires non-negative (>= 0)
+      if (transformType === "sqrt") {
+        return dataValueInfo.hasNegative;
+      }
+      // Box-Cox requires strictly positive (> 0)
+      if (transformType === "box_cox") {
+        return dataValueInfo.hasNegative || dataValueInfo.hasZero;
+      }
+    }
+    return false;
+  };
+
+  // Get reason why transformation is disabled
+  const getDisabledReason = (transformType: string): string | null => {
+    if (transformType === "log" && (dataValueInfo.hasNegative || dataValueInfo.hasZero)) {
+      if (dataValueInfo.hasNegative) {
+        return `Data contains negative values (min: ${dataValueInfo.minValue.toFixed(2)}). Log requires positive values only.`;
+      }
+      return "Data contains zero values. Log requires strictly positive values.";
+    }
+    if (transformType === "sqrt" && dataValueInfo.hasNegative) {
+      return `Data contains negative values (min: ${dataValueInfo.minValue.toFixed(2)}). Square root requires non-negative values.`;
+    }
+    if (transformType === "box_cox" && (dataValueInfo.hasNegative || dataValueInfo.hasZero)) {
+      if (dataValueInfo.hasNegative) {
+        return `Data contains negative values (min: ${dataValueInfo.minValue.toFixed(2)}). Box-Cox requires positive values only.`;
+      }
+      return "Data contains zero values. Box-Cox requires strictly positive values.";
+    }
+    return null;
+  };
 
   // Apply transformations to data
   const applyTransformations = (values: number[]): number[] => {
@@ -510,29 +581,66 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
                   <p className="text-sm text-muted-foreground mb-3">
                     Select transformations to apply. Results update automatically below.
                   </p>
+
+                  {/* Warning if data has negative or zero values */}
+                  {(dataValueInfo.hasNegative || dataValueInfo.hasZero) && (
+                    <div className="p-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg mb-3">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <div className="text-sm">
+                          <p className="font-medium text-amber-800 dark:text-amber-200">Data Value Constraint</p>
+                          <p className="text-amber-700 dark:text-amber-300 text-xs mt-1">
+                            {dataValueInfo.hasNegative
+                              ? `Your data contains negative values (min: ${dataValueInfo.minValue.toFixed(2)}). Some transformations are disabled.`
+                              : "Your data contains zero values. Some transformations are disabled."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {ALL_TRANSFORMATIONS.map((transform) => {
                     const isSelected = selectedTransformations.some((t) => t.type === transform.type);
                     const isRecommended = analyzeSegment.recommendations.includes(transform.type);
+                    const isDisabled = isTransformDisabled(transform.type);
+                    const disabledReason = getDisabledReason(transform.type);
 
                     return (
                       <div
                         key={transform.type}
-                        className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                          isSelected ? "bg-primary/10 border-primary shadow-sm" : "hover:bg-muted/50"
+                        className={`flex items-start gap-3 p-3 rounded-lg border transition-all ${
+                          isDisabled
+                            ? "bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-60 cursor-not-allowed"
+                            : isSelected
+                            ? "bg-primary/10 border-primary shadow-sm cursor-pointer"
+                            : "hover:bg-muted/50 cursor-pointer"
                         }`}
-                        onClick={() => toggleTransformation(transform)}
+                        onClick={() => !isDisabled && toggleTransformation(transform)}
                       >
-                        <Checkbox checked={isSelected} className="mt-0.5" />
+                        <Checkbox
+                          checked={isSelected}
+                          disabled={isDisabled}
+                          className="mt-0.5"
+                        />
                         <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{getTransformationLabel(transform.type)}</span>
-                            {isRecommended && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`font-medium ${isDisabled ? "text-muted-foreground" : ""}`}>
+                              {getTransformationLabel(transform.type)}
+                            </span>
+                            {isDisabled && (
+                              <Badge variant="outline" className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                                Unavailable
+                              </Badge>
+                            )}
+                            {!isDisabled && isRecommended && (
                               <Badge variant="default" className="text-xs bg-green-600">
                                 Recommended
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground mt-1">{transform.reason}</p>
+                          <p className={`text-sm mt-1 ${isDisabled ? "text-muted-foreground/70" : "text-muted-foreground"}`}>
+                            {isDisabled && disabledReason ? disabledReason : transform.reason}
+                          </p>
                         </div>
                       </div>
                     );
