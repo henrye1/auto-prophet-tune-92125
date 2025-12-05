@@ -492,25 +492,68 @@ const DataAnalysis: React.FC<DataAnalysisProps> = ({
     return acf;
   };
 
-  // Calculate PACF (using Durbin-Levinson algorithm approximation)
+  // Calculate PACF using proper Durbin-Levinson algorithm
   const calculatePACF = (values: number[], maxLag: number = 20): { lag: number; value: number }[] => {
-    const acf = calculateACF(values, maxLag);
+    const n = values.length;
+    const effectiveMaxLag = Math.min(maxLag, Math.floor(n / 4));
+
+    // First compute ACF values including lag 0 (which is 1)
+    const mean = values.reduce((a, b) => a + b, 0) / n;
+    const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
+
+    if (variance === 0) {
+      return Array.from({ length: effectiveMaxLag }, (_, i) => ({ lag: i + 1, value: 0 }));
+    }
+
+    // rho[k] = autocorrelation at lag k
+    const rho: number[] = [1]; // rho[0] = 1
+    for (let k = 1; k <= effectiveMaxLag; k++) {
+      let sum = 0;
+      for (let i = 0; i < n - k; i++) {
+        sum += (values[i] - mean) * (values[i + k] - mean);
+      }
+      rho.push(sum / (n * variance));
+    }
+
+    // Durbin-Levinson algorithm
+    // phi[k][j] represents the j-th AR coefficient in an AR(k) model
     const pacf: { lag: number; value: number }[] = [];
 
-    // Simplified PACF calculation
-    for (let k = 0; k < acf.length; k++) {
-      if (k === 0) {
-        pacf.push({ lag: k + 1, value: acf[k].value });
+    // For storing the AR coefficients at each order
+    let prevPhi: number[] = [];
+
+    for (let k = 1; k <= effectiveMaxLag; k++) {
+      if (k === 1) {
+        // First PACF equals first ACF
+        pacf.push({ lag: 1, value: rho[1] });
+        prevPhi = [rho[1]];
       } else {
-        // Approximate PACF using regression residuals concept
-        let pacfValue = acf[k].value;
-        for (let j = 0; j < k; j++) {
-          pacfValue -= (pacf[j]?.value || 0) * (acf[k - j - 1]?.value || 0);
+        // Compute phi[k,k] using Durbin-Levinson recursion
+        let numerator = rho[k];
+        let denominator = 1;
+
+        for (let j = 0; j < k - 1; j++) {
+          numerator -= prevPhi[j] * rho[k - 1 - j];
+          denominator -= prevPhi[j] * rho[j + 1];
         }
-        pacfValue = pacfValue / (1 + Math.abs(pacfValue) * 0.1); // Normalize
-        pacf.push({ lag: k + 1, value: Math.max(-1, Math.min(1, pacfValue)) });
+
+        // Avoid division by zero
+        const phiKK = Math.abs(denominator) > 1e-10 ? numerator / denominator : 0;
+
+        // Clamp to [-1, 1] for numerical stability
+        const clampedPhiKK = Math.max(-1, Math.min(1, phiKK));
+        pacf.push({ lag: k, value: clampedPhiKK });
+
+        // Update AR coefficients for next iteration
+        const newPhi: number[] = [];
+        for (let j = 0; j < k - 1; j++) {
+          newPhi.push(prevPhi[j] - clampedPhiKK * prevPhi[k - 2 - j]);
+        }
+        newPhi.push(clampedPhiKK);
+        prevPhi = newPhi;
       }
     }
+
     return pacf;
   };
 
