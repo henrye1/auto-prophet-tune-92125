@@ -237,9 +237,9 @@ const RegressorConfig: React.FC<RegressorConfigProps> = ({
                         <div className="flex items-center gap-2">
                           <Slider
                             value={[regressor.priorScale]}
-                            min={0.1}
+                            min={0.001}
                             max={50}
-                            step={0.1}
+                            step={0.001}
                             onValueChange={([val]) =>
                               handleUpdateRegressor(regressor.name, { priorScale: val })
                             }
@@ -253,10 +253,10 @@ const RegressorConfig: React.FC<RegressorConfigProps> = ({
                                 priorScale: parseFloat(e.target.value) || 10,
                               })
                             }
-                            className="w-16 h-8 text-xs"
-                            min={0.1}
+                            className="w-20 h-8 text-xs"
+                            min={0.001}
                             max={50}
-                            step={0.1}
+                            step={0.001}
                           />
                         </div>
                         <p className="text-xs text-muted-foreground">
