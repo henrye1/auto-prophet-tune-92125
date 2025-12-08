@@ -201,7 +201,7 @@ const ForecastResults: React.FC<ForecastResultsProps> = ({
     return { beforeData, afterData, hasTransformations: transformations.length > 0 };
   }, [originalData, dateColumn, segmentColumn, selectedSegment, dependentVariable, selectedTransformations]);
 
-  const formatNumber = (num: number | null, decimals = 2): string => {
+  const formatNumber = (num: number | null, decimals = 4): string => {
     if (num === null || num === undefined) return "N/A";
     return num.toFixed(decimals);
   };
