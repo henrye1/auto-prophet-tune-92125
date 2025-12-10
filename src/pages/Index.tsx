@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { toast } from "sonner";
 import DataUpload from "@/components/forecast/DataUpload";
 import ModelSelector from "@/components/forecast/ModelSelector";
 import VariableConfig from "@/components/forecast/VariableConfig";
@@ -19,6 +20,9 @@ import type { ForecastModel, SegmentConfig, ProphetParameters, PerformanceMetric
 import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
 import type { TransformationRecommendation } from "@/types/dataAnalysis";
 import { defaultProphetParams } from "@/types/forecast";
+
+// Azure Function URL for forecasting
+const AZURE_FUNCTION_URL = "http://localhost:7071/api/TEST_FUNC";
 
 // Metric calculation helper functions
 const calculateMetrics = (
@@ -234,132 +238,97 @@ const Index: React.FC = () => {
     }
   };
 
-  // Run forecast (mock implementation)
+  // Run forecast via Azure Function
   const runForecast = async () => {
     setIsRunning(true);
     setActiveTab("results");
 
-    // Simulate processing delay
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      toast.info("Running Prophet forecast via Azure Function...");
 
-    // Generate mock results using actual data dates where possible
-    const mockResults: ForecastResultsType = {
-      timestamp: new Date().toISOString(),
-      modelType: selectedModel,
-      segmentResults: segments.map((segment) => {
-        // Get segment data
-        let segmentData = csvData;
-        if (segmentColumn && segment.segmentName !== "All Data") {
-          segmentData = csvData.filter(
-            (row) => String(row[segmentColumn]) === segment.segmentName
-          );
-        }
-
-        // Use actual dates from data
-        const actualDates = segmentData
-          .map((row) => String(row[dateColumn]))
-          .filter((d) => d && d !== "undefined");
-
-        const actualValues = segmentData
-          .map((row) => Number(row[dependentVariable]))
-          .filter((v) => !isNaN(v));
-
-        const dataLength = Math.min(actualDates.length, actualValues.length);
-        const trainEndIdx = Math.floor(dataLength * 0.8);
-        const testEndIdx = dataLength;
-
-        // Generate forecast dates based on frequency
-        const { unit, amount } = getDateIncrement(segment.frequency);
-        const lastDate = actualDates.length > 0 ? new Date(actualDates[actualDates.length - 1]) : new Date();
-        const forecastDates: string[] = [];
-        for (let i = 1; i <= 10; i++) {
-          const forecastDate = new Date(lastDate);
-          if (unit === 'days') {
-            forecastDate.setDate(forecastDate.getDate() + amount * i);
-          } else if (unit === 'months') {
-            forecastDate.setMonth(forecastDate.getMonth() + amount * i);
-          } else {
-            forecastDate.setFullYear(forecastDate.getFullYear() + amount * i);
+      const segmentResults = await Promise.all(
+        segments.map(async (segment) => {
+          // Get segment data
+          let segmentData = csvData;
+          if (segmentColumn && segment.segmentName !== "All Data") {
+            segmentData = csvData.filter(
+              (row) => String(row[segmentColumn]) === segment.segmentName
+            );
           }
-          forecastDates.push(forecastDate.toISOString());
-        }
 
-        // Build forecast data from actual data + forecast extension
-        const forecastData = [
-          // Historical data
-          ...actualDates.slice(0, dataLength).map((date, i) => {
-            const value = actualValues[i] || 0;
-            // Add small noise for demo predictions (in real app, this would be model output)
-            const noise = (Math.random() - 0.5) * value * 0.1;
-            const predicted = value + noise;
-            // Confidence interval based on prediction uncertainty
-            const uncertainty = Math.abs(value) * 0.15;
-            return {
-              date: date,
-              actual: value,
-              predicted: predicted,
-              lowerBound: predicted - uncertainty,
-              upperBound: predicted + uncertainty,
-              isForecast: false,
-              isTestSet: i >= trainEndIdx,
-            };
-          }),
-          // Future forecast
-          ...forecastDates.map((date, i) => {
-            const lastValue = actualValues[actualValues.length - 1] || 100;
-            const trend = lastValue * (1 + 0.02 * (i + 1));
-            const uncertainty = Math.abs(trend) * 0.15 * (1 + i * 0.1); // Increasing uncertainty
-            return {
-              date: date,
-              actual: null,
-              predicted: trend,
-              lowerBound: trend - uncertainty,
-              upperBound: trend + uncertainty,
-              isForecast: true,
-              isTestSet: false,
-            };
-          }),
-        ];
+          // Call Azure Function
+          const response = await fetch(AZURE_FUNCTION_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              data: segmentData,
+              dateColumn,
+              dependentVariable,
+              params: {
+                growth: prophetParams.growth,
+                seasonalityMode: prophetParams.seasonalityMode,
+                changepointPriorScale: prophetParams.changepointPriorScale,
+                seasonalityPriorScale: prophetParams.seasonalityPriorScale,
+                holidaysPriorScale: prophetParams.holidaysPriorScale,
+                yearlySeasonality: prophetParams.yearlySeasonality,
+                weeklySeasonality: prophetParams.weeklySeasonality,
+                dailySeasonality: prophetParams.dailySeasonality,
+                uncertaintyInterval: prophetParams.uncertaintyInterval,
+              },
+              frequency: segment.frequency,
+              trainTestSplit: 0.8,
+              forecastPeriods: 10,
+            }),
+          });
 
-        // Extract training and test data for metric calculations
-        const trainData = forecastData.filter(d => !d.isForecast && !d.isTestSet);
-        const testData = forecastData.filter(d => !d.isForecast && d.isTestSet);
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "Forecast failed");
+          }
 
-        const trainActuals = trainData.map(d => d.actual).filter((a): a is number => a !== null);
-        const trainPredictions = trainData.map(d => d.predicted).filter((p): p is number => p !== null);
-        const trainLower = trainData.map(d => d.lowerBound).filter((l): l is number => l !== null);
-        const trainUpper = trainData.map(d => d.upperBound).filter((u): u is number => u !== null);
+          const result = await response.json();
 
-        const testActuals = testData.map(d => d.actual).filter((a): a is number => a !== null);
-        const testPredictions = testData.map(d => d.predicted).filter((p): p is number => p !== null);
-        const testLower = testData.map(d => d.lowerBound).filter((l): l is number => l !== null);
-        const testUpper = testData.map(d => d.upperBound).filter((u): u is number => u !== null);
+          // Convert response to our format
+          const forecastData = result.forecastData;
+          const trainData = forecastData.filter((d: any) => !d.isForecast && !d.isTestSet);
+          const testData = forecastData.filter((d: any) => !d.isForecast && d.isTestSet);
 
-        return {
-          segmentName: segment.segmentName,
-          frequency: segment.frequency,
-          forecastData,
-          metrics: selectedMetrics.map((metric) => ({
-            metric,
-            trainValue: calculateMetrics(trainActuals, trainPredictions, trainLower, trainUpper, metric),
-            testValue: calculateMetrics(testActuals, testPredictions, testLower, testUpper, metric),
-          })),
-          transformationsApplied: selectedTransformations.map((t) => t.type),
-          modelConfig: { model: selectedModel },
-          trainStartDate: actualDates[0] || new Date().toISOString(),
-          trainEndDate: actualDates[trainEndIdx - 1] || new Date().toISOString(),
-          testStartDate: actualDates[trainEndIdx] || new Date().toISOString(),
-          testEndDate: actualDates[testEndIdx - 1] || new Date().toISOString(),
-          forecastStartDate: forecastDates[0] || new Date().toISOString(),
-          forecastEndDate: forecastDates[forecastDates.length - 1] || new Date().toISOString(),
-          aiCommentary:
-            "The model shows good fit to the training data with minimal overfitting. Seasonality patterns are well captured.",
-        };
-      }),
-    };
+          return {
+            segmentName: segment.segmentName,
+            frequency: segment.frequency,
+            forecastData,
+            metrics: selectedMetrics.map((metric) => ({
+              metric,
+              trainValue: result.trainMetrics[metric] || 0,
+              testValue: result.testMetrics[metric] || 0,
+            })),
+            transformationsApplied: selectedTransformations.map((t) => t.type),
+            modelConfig: { model: selectedModel, ...result.modelParams },
+            trainStartDate: trainData[0]?.date || new Date().toISOString(),
+            trainEndDate: trainData[trainData.length - 1]?.date || new Date().toISOString(),
+            testStartDate: testData[0]?.date || new Date().toISOString(),
+            testEndDate: testData[testData.length - 1]?.date || new Date().toISOString(),
+            forecastStartDate: forecastData.find((d: any) => d.isForecast)?.date || new Date().toISOString(),
+            forecastEndDate: forecastData[forecastData.length - 1]?.date || new Date().toISOString(),
+            aiCommentary: "Forecast generated using Facebook Prophet via Azure Functions.",
+          };
+        })
+      );
 
-    setForecastResults(mockResults);
-    setIsRunning(false);
+      const results: ForecastResultsType = {
+        timestamp: new Date().toISOString(),
+        modelType: selectedModel,
+        segmentResults,
+      };
+
+      setForecastResults(results);
+      toast.success("Prophet forecast completed successfully!");
+    } catch (error) {
+      console.error("Forecast error:", error);
+      toast.error(`Forecast failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   return (
