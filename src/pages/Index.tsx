@@ -22,7 +22,7 @@ import type { TransformationRecommendation } from "@/types/dataAnalysis";
 import { defaultProphetParams } from "@/types/forecast";
 
 // Azure Function URL for forecasting
-const AZURE_FUNCTION_URL = "http://localhost:7071/api/TEST_FUNC";
+const AZURE_FUNCTION_URL = "http://localhost:7072/api/TEST_FUNC";
 
 // Metric calculation helper functions
 const calculateMetrics = (
