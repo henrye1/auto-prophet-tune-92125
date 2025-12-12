@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { LogOut, TrendingUp, Play } from "lucide-react";
+import { LogOut, TrendingUp, Play, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -244,7 +244,14 @@ const Index: React.FC = () => {
     setActiveTab("results");
 
     try {
-      toast.info("Running Prophet forecast via Azure Function...");
+      // Check if AutoGluon is selected - it requires separate Azure Function
+      if (selectedModel === "autogluon") {
+        toast.warning("AutoGluon backend not yet configured. Using Prophet as fallback.");
+        // In future, you would call a different Azure Function URL for AutoGluon:
+        // const AUTOGLUON_FUNCTION_URL = "http://localhost:7071/api/AUTOGLUON_FUNC";
+      }
+
+      toast.info(`Running ${selectedModel === "prophet" ? "Prophet" : selectedModel.toUpperCase()} forecast via Azure Function...`);
 
       const segmentResults = await Promise.all(
         segments.map(async (segment) => {
@@ -261,19 +268,20 @@ const Index: React.FC = () => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              model: selectedModel, // Send model type to Azure Function
               data: segmentData,
               dateColumn,
               dependentVariable,
               params: {
-                growth: prophetParams.growth,
+                growth: prophetParams.growthType,
                 seasonalityMode: prophetParams.seasonalityMode,
                 changepointPriorScale: prophetParams.changepointPriorScale,
                 seasonalityPriorScale: prophetParams.seasonalityPriorScale,
-                holidaysPriorScale: prophetParams.holidaysPriorScale,
+                holidayPriorScale: prophetParams.holidayPriorScale,
                 yearlySeasonality: prophetParams.yearlySeasonality,
                 weeklySeasonality: prophetParams.weeklySeasonality,
                 dailySeasonality: prophetParams.dailySeasonality,
-                uncertaintyInterval: prophetParams.uncertaintyInterval,
+                intervalWidth: prophetParams.intervalWidth,
               },
               frequency: segment.frequency,
               trainTestSplit: 0.8,
@@ -322,7 +330,7 @@ const Index: React.FC = () => {
       };
 
       setForecastResults(results);
-      toast.success("Prophet forecast completed successfully!");
+      toast.success(`${selectedModel === "prophet" ? "Prophet" : selectedModel.toUpperCase()} forecast completed successfully!`);
     } catch (error) {
       console.error("Forecast error:", error);
       toast.error(`Forecast failed: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -346,6 +354,23 @@ const Index: React.FC = () => {
                     Time Series Forecasting Platform
                   </p>
                 </div>
+                {/* Show selected model in header */}
+                {csvData.length > 0 && (
+                  <Badge
+                    variant="default"
+                    className={`ml-4 text-sm px-3 py-1 ${
+                      selectedModel === "prophet"
+                        ? "bg-blue-600 hover:bg-blue-700"
+                        : selectedModel === "autogluon"
+                        ? "bg-purple-600 hover:bg-purple-700"
+                        : "bg-gray-600"
+                    }`}
+                  >
+                    Model: {selectedModel === "prophet" ? "Prophet" :
+                            selectedModel === "autogluon" ? "AutoGluon" :
+                            selectedModel.toUpperCase()}
+                  </Badge>
+                )}
               </div>
               <Button variant="outline" size="sm">
                 <LogOut className="h-4 w-4 mr-1" />
@@ -358,6 +383,38 @@ const Index: React.FC = () => {
         {/* Main Content */}
         <main className="container mx-auto px-4 py-6">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as WorkflowStep)}>
+            {/* Configuration Summary Bar */}
+            {csvData.length > 0 && (
+              <div className="mb-4 p-3 bg-muted/50 rounded-lg border flex flex-wrap items-center gap-3 text-sm">
+                <span className="font-medium text-muted-foreground">Current Config:</span>
+                <Badge
+                  variant="outline"
+                  className={`${
+                    selectedModel === "prophet"
+                      ? "border-blue-500 text-blue-600 bg-blue-50"
+                      : selectedModel === "autogluon"
+                      ? "border-purple-500 text-purple-600 bg-purple-50"
+                      : "border-gray-500"
+                  }`}
+                >
+                  {selectedModel === "prophet" ? "📈 Prophet" :
+                   selectedModel === "autogluon" ? "⚡ AutoGluon" :
+                   selectedModel.toUpperCase()}
+                </Badge>
+                {fileName && (
+                  <Badge variant="outline" className="border-green-500 text-green-600 bg-green-50">
+                    📁 {fileName.length > 20 ? fileName.slice(0, 17) + "..." : fileName}
+                  </Badge>
+                )}
+                {dependentVariable && (
+                  <Badge variant="outline">Target: {dependentVariable}</Badge>
+                )}
+                {segments.length > 0 && (
+                  <Badge variant="outline">{segments.length} segment(s)</Badge>
+                )}
+              </div>
+            )}
+
             {/* Step Navigation */}
             <div className="mb-6 overflow-x-auto">
               <TabsList className="inline-flex h-auto p-1 gap-1">
@@ -502,6 +559,43 @@ const Index: React.FC = () => {
                     parameters={prophetParams}
                     onParametersChange={setProphetParams}
                   />
+                )}
+                {selectedModel === "autogluon" && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Zap className="h-5 w-5 text-purple-600" />
+                        AutoGluon Configuration
+                      </CardTitle>
+                      <CardDescription>
+                        AutoGluon automatically selects and tunes models for optimal performance
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                          <h4 className="font-medium text-purple-800 mb-2">Automatic Model Selection</h4>
+                          <p className="text-sm text-purple-700">
+                            AutoGluon will automatically train multiple models including:
+                          </p>
+                          <ul className="mt-2 text-sm text-purple-600 list-disc list-inside space-y-1">
+                            <li>XGBoost - Gradient boosting</li>
+                            <li>LightGBM - Light gradient boosting</li>
+                            <li>CatBoost - Categorical boosting</li>
+                            <li>Neural Networks - Deep learning models</li>
+                            <li>Ensemble - Weighted combination of models</li>
+                          </ul>
+                        </div>
+                        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <h4 className="font-medium text-yellow-800 mb-2">Note: Azure Function Required</h4>
+                          <p className="text-sm text-yellow-700">
+                            AutoGluon forecasting requires an Azure Function endpoint configured for AutoGluon.
+                            Contact your administrator to set up the AutoGluon backend.
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
                 <div className="flex justify-end mt-4 gap-2">
                   <Button variant="default" onClick={runForecast} disabled={isRunning}>
