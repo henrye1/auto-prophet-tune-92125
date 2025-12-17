@@ -68,7 +68,7 @@ const ForecastProgress: React.FC<ForecastProgressProps> = ({
             <span>Overall Progress</span>
             <span className="font-medium">{Math.round(overallProgress)}%</span>
           </div>
-          <Progress value={overallProgress} className="h-2" />
+          <Progress value={overallProgress} className="h-3" />
           <div className="flex gap-4 text-xs text-muted-foreground">
             <span>{completedCount} completed</span>
             {errorCount > 0 && (
@@ -77,6 +77,15 @@ const ForecastProgress: React.FC<ForecastProgressProps> = ({
             <span>{segments.length - completedCount - errorCount} remaining</span>
           </div>
         </div>
+
+        {/* Info box for long-running operations */}
+        {overallProgress < 90 && overallProgress > 20 && (
+          <div className="rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-4">
+            <p className="text-sm text-blue-900 dark:text-blue-100">
+              <strong>Tip:</strong> For AutoGluon forecasts, check the Azure Function terminal to see real-time training progress and the model leaderboard.
+            </p>
+          </div>
+        )}
 
         {/* Segment Progress List */}
         <div className="space-y-2">

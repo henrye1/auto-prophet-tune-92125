@@ -21,8 +21,8 @@ import type { ForecastResults as ForecastResultsType } from "@/types/forecastRes
 import type { TransformationRecommendation } from "@/types/dataAnalysis";
 import { defaultProphetParams } from "@/types/forecast";
 
-// Azure Function URL for forecasting
-const AZURE_FUNCTION_URL = "http://localhost:7071/api/TEST_FUNC";
+// Import the Azure Function service
+import { azureFunctionService } from "@/services/azureFunctionService";
 
 // Metric calculation helper functions
 const calculateMetrics = (
@@ -172,6 +172,8 @@ const Index: React.FC = () => {
   const [activeTab, setActiveTab] = useState<WorkflowStep>("upload");
   const [isRunning, setIsRunning] = useState(false);
   const [forecastResults, setForecastResults] = useState<ForecastResultsType | null>(null);
+  const [forecastProgress, setForecastProgress] = useState(0);
+  const [forecastStatus, setForecastStatus] = useState<string>("");
 
   // Data loading handler
   const handleDataLoaded = useCallback(
@@ -242,97 +244,88 @@ const Index: React.FC = () => {
   const runForecast = async () => {
     setIsRunning(true);
     setActiveTab("results");
+    setForecastProgress(0);
+    setForecastStatus("");
 
     try {
-      // Check if AutoGluon is selected - it requires separate Azure Function
+      // Show initial progress
+      setForecastProgress(10);
+      setForecastStatus("Preparing forecast configuration...");
+
+      const modelName = selectedModel === "prophet" ? "Prophet" : selectedModel === "autogluon" ? "AutoGluon" : selectedModel.toUpperCase();
+
+      // Special message for AutoGluon
       if (selectedModel === "autogluon") {
-        toast.warning("AutoGluon backend not yet configured. Using Prophet as fallback.");
-        // In future, you would call a different Azure Function URL for AutoGluon:
-        // const AUTOGLUON_FUNCTION_URL = "http://localhost:7071/api/AUTOGLUON_FUNC";
+        toast.info(`Starting ${modelName} forecast. This will train multiple models and may take 2-10 minutes...`);
+        setForecastStatus("Training multiple AutoGluon models (this may take several minutes)...");
+      } else {
+        toast.info(`Running ${modelName} forecast...`);
+        setForecastStatus(`Running ${modelName} model...`);
       }
 
-      toast.info(`Running ${selectedModel === "prophet" ? "Prophet" : selectedModel.toUpperCase()} forecast via Azure Function...`);
+      setForecastProgress(20);
 
-      const segmentResults = await Promise.all(
-        segments.map(async (segment) => {
-          // Get segment data
-          let segmentData = csvData;
-          if (segmentColumn && segment.segmentName !== "All Data") {
-            segmentData = csvData.filter(
-              (row) => String(row[segmentColumn]) === segment.segmentName
-            );
-          }
-
-          // Call Azure Function
-          const response = await fetch(AZURE_FUNCTION_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: selectedModel, // Send model type to Azure Function
-              data: segmentData,
-              dateColumn,
-              dependentVariable,
-              params: {
-                growth: prophetParams.growthType,
-                seasonalityMode: prophetParams.seasonalityMode,
-                changepointPriorScale: prophetParams.changepointPriorScale,
-                seasonalityPriorScale: prophetParams.seasonalityPriorScale,
-                holidayPriorScale: prophetParams.holidayPriorScale,
-                yearlySeasonality: prophetParams.yearlySeasonality,
-                weeklySeasonality: prophetParams.weeklySeasonality,
-                dailySeasonality: prophetParams.dailySeasonality,
-                intervalWidth: prophetParams.intervalWidth,
-              },
-              frequency: segment.frequency,
-              trainTestSplit: 0.8,
-              forecastPeriods: 10,
-            }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || "Forecast failed");
-          }
-
-          const result = await response.json();
-
-          // Convert response to our format
-          const forecastData = result.forecastData;
-          const trainData = forecastData.filter((d: any) => !d.isForecast && !d.isTestSet);
-          const testData = forecastData.filter((d: any) => !d.isForecast && d.isTestSet);
-
-          return {
-            segmentName: segment.segmentName,
-            frequency: segment.frequency,
-            forecastData,
-            metrics: selectedMetrics.map((metric) => ({
-              metric,
-              trainValue: result.trainMetrics[metric] || 0,
-              testValue: result.testMetrics[metric] || 0,
-            })),
-            transformationsApplied: selectedTransformations.map((t) => t.type),
-            modelConfig: { model: selectedModel, ...result.modelParams },
-            trainStartDate: trainData[0]?.date || new Date().toISOString(),
-            trainEndDate: trainData[trainData.length - 1]?.date || new Date().toISOString(),
-            testStartDate: testData[0]?.date || new Date().toISOString(),
-            testEndDate: testData[testData.length - 1]?.date || new Date().toISOString(),
-            forecastStartDate: forecastData.find((d: any) => d.isForecast)?.date || new Date().toISOString(),
-            forecastEndDate: forecastData[forecastData.length - 1]?.date || new Date().toISOString(),
-            aiCommentary: "Forecast generated using Facebook Prophet via Azure Functions.",
-          };
-        })
-      );
-
-      const results: ForecastResultsType = {
-        timestamp: new Date().toISOString(),
-        modelType: selectedModel,
-        segmentResults,
+      // Prepare the forecast configuration using the new service format
+      const forecastConfig = {
+        model: selectedModel,
+        dateColumn,
+        segmentColumn: segmentColumn || "segment",
+        dependentVariable,
+        segments: segments.map(seg => ({
+          segmentName: seg.segmentName,
+          trainRecords: seg.trainRecords || 100,
+          testRecords: seg.testRecords || 20,
+          forecastPeriods: seg.forecastPeriods || 10,
+          frequency: seg.frequency,
+          regressors: seg.regressors || []
+        })),
+        prophetParams,
+        selectedMetrics
       };
 
-      setForecastResults(results);
-      toast.success(`${selectedModel === "prophet" ? "Prophet" : selectedModel.toUpperCase()} forecast completed successfully!`);
+      setForecastProgress(30);
+      setForecastStatus("Sending request to Azure Function...");
+
+      // Simulate progress for long-running operations
+      const progressInterval = setInterval(() => {
+        setForecastProgress(prev => {
+          if (prev < 90) return prev + 5;
+          return prev;
+        });
+      }, selectedModel === "autogluon" ? 5000 : 1000); // Slower updates for AutoGluon
+
+      try {
+        // Call the new Azure Function service
+        const results = await azureFunctionService.runForecast(forecastConfig, csvData);
+
+        clearInterval(progressInterval);
+        setForecastProgress(100);
+        setForecastStatus("Forecast completed!");
+
+        setForecastResults(results);
+
+        // Special message for AutoGluon to check logs
+        if (selectedModel === "autogluon") {
+          const modelConfig = results.segmentResults?.[0]?.modelConfig;
+          const bestModel = modelConfig?.best_model || "Unknown";
+          const numModels = modelConfig?.num_models_trained || 0;
+
+          toast.success(
+            `AutoGluon forecast completed! Trained ${numModels} models. Best: ${bestModel}`,
+            { duration: 6000 }
+          );
+          setForecastStatus(`Completed! Best model: ${bestModel} (${numModels} models trained)`);
+        } else {
+          toast.success(`${modelName} forecast completed successfully!`);
+          setForecastStatus("Forecast completed successfully!");
+        }
+      } finally {
+        clearInterval(progressInterval);
+      }
     } catch (error) {
       console.error("Forecast error:", error);
+      setForecastProgress(0);
+      setForecastStatus("Forecast failed");
       toast.error(`Forecast failed: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setIsRunning(false);
@@ -613,8 +606,8 @@ const Index: React.FC = () => {
                       segmentName: s.segmentName,
                       status: "processing",
                     }))}
-                    overallProgress={50}
-                    currentStep="Running forecast model..."
+                    overallProgress={forecastProgress}
+                    currentStep={forecastStatus || "Running forecast model..."}
                   />
                 ) : forecastResults ? (
                   <ForecastResults
