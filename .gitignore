@@ -36,3 +36,29 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
+
+# Large data files (don't commit to Git)
+*.csv
+*.xlsx
+*.xls
+*.db
+*.sqlite
+*.sqlite3
+
+# Machine learning models
+*.pkl
+*.pickle
+*.h5
+*.pt
+*.pth
+*.model
+*.bin
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.rar
+
+# Vite cache
+.vite
