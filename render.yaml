@@ -1,0 +1,40 @@
+# Render Blueprint — deploys both the forecast API (Docker web service)
+# and the React/Vite UI (static site).
+# Deploy: Render Dashboard → New → Blueprint → pick this repo.
+services:
+  # ---- Python forecast API (Prophet + AutoGluon) ----
+  - type: web
+    name: forecast-service
+    runtime: docker
+    rootDir: forecast-service
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: standard          # AutoGluon needs ~2GB RAM; do NOT use free/starter
+    healthCheckPath: /health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false          # https://<project-ref>.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false          # Supabase → Project Settings → API Keys → Secret key (sb_secret_…); server-side only
+      - key: SUPABASE_ANON_KEY
+        sync: false          # publishable key (sb_publishable_…); used as auth-introspection apikey
+
+  # ---- React / Vite UI (static site) ----
+  - type: web
+    name: forecast-ui
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        path: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: VITE_SUPABASE_URL
+        value: https://lhwvbvremwspkzcpxqve.supabase.co
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        value: sb_publishable_KVaiGuzmk_yUYgpY8YYuew_9_MlzWc2
+      - key: VITE_FORECAST_SERVICE_URL
+        sync: false          # set to the forecast-service URL after first deploy, then redeploy the UI
