@@ -1,4 +1,5 @@
 import pandas as pd
+from datetime import datetime, timezone
 
 from app import db
 from app.models import get_model
@@ -11,6 +12,7 @@ MIN_TRAIN_RECORDS = 2
 def process_job(job_id: str, req: ForecastRequest) -> None:
     try:
         db.update_job(job_id, {"status": "running", "progress": 0})
+        started_at = datetime.now(timezone.utc).isoformat()
         full = pd.DataFrame(req.data)
         fit_forecast = get_model(req.model)
         total = len(req.segments)
@@ -45,12 +47,12 @@ def process_job(job_id: str, req: ForecastRequest) -> None:
             progress = round((i + 1) / total * 100)
             db.update_job(job_id, {
                 "status": "running", "progress": progress,
-                "results": {"segments": segments_out, "model": req.model},
+                "results": {"segments": segments_out, "model": req.model, "timestamp": started_at},
             })
 
         db.update_job(job_id, {
             "status": "completed", "progress": 100,
-            "results": {"segments": segments_out, "model": req.model},
+            "results": {"segments": segments_out, "model": req.model, "timestamp": started_at},
         })
     except Exception as err:  # noqa: BLE001
         db.update_job(job_id, {"status": "failed", "error": str(err)})

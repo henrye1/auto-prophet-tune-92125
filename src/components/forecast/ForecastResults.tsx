@@ -246,8 +246,18 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
 
         {results.segments.map((segment, idx) => (
           <TabsContent key={idx} value={segment.segment} className="space-y-6" data-seg={segment.segment}>
+            {/* Segment error indicator */}
+            {segment.error && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  <p className="font-semibold text-sm mb-1">This segment could not be forecast</p>
+                  <p className="text-sm">{segment.error}</p>
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* Metrics Card - Primary Model */}
-            {segment.metrics && (
+            {!segment.error && segment.metrics && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
@@ -506,7 +516,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
             )}
 
             {/* Complete Time Series - Transformed Data */}
-            <Card className="border-green-500/30 bg-green-50/10">
+            {!segment.error && <Card className="border-green-500/30 bg-green-50/10">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Activity className="h-4 w-4 text-green-600" />
@@ -648,7 +658,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                   </AreaChart>
                 </ResponsiveContainer>
               </CardContent>
-            </Card>
+            </Card>}
 
             {/* Complete Time Series - Raw Data */}
             {segment.raw_training_data && segment.raw_test_data && segment.raw_forecast_data && (
@@ -793,20 +803,22 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
             )}
 
             {/* Results Table */}
-            <ResultsTable
-              segment={segment.segment}
-              trainingData={segment.training_data}
-              testData={segment.test_data}
-              forecastData={segment.forecast_data}
-              primaryModel={segment.model || results.model}
-              benchmarkModel={segment.benchmark_model}
-              benchmarkTrainingData={segment.benchmark_training_data}
-              benchmarkTestData={segment.benchmark_test_data}
-              benchmarkForecastData={segment.benchmark_forecast_data}
-              rawTrainingData={segment.raw_training_data}
-              rawTestData={segment.raw_test_data}
-              rawForecastData={segment.raw_forecast_data}
-            />
+            {!segment.error && (
+              <ResultsTable
+                segment={segment.segment}
+                trainingData={segment.training_data}
+                testData={segment.test_data}
+                forecastData={segment.forecast_data}
+                primaryModel={segment.model || results.model}
+                benchmarkModel={segment.benchmark_model}
+                benchmarkTrainingData={segment.benchmark_training_data}
+                benchmarkTestData={segment.benchmark_test_data}
+                benchmarkForecastData={segment.benchmark_forecast_data}
+                rawTrainingData={segment.raw_training_data}
+                rawTestData={segment.raw_test_data}
+                rawForecastData={segment.raw_forecast_data}
+              />
+            )}
           </TabsContent>
         ))}
       </Tabs>
