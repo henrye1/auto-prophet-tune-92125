@@ -1,7 +1,7 @@
 
 -- Migration: 20251030153221
 -- Create profiles table for user information
-CREATE TABLE public.profiles (
+CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID NOT NULL PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT,
   full_name TEXT,
@@ -13,23 +13,26 @@ CREATE TABLE public.profiles (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Profiles policies
-CREATE POLICY "Users can view their own profile" 
-ON public.profiles 
-FOR SELECT 
+DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
+CREATE POLICY "Users can view their own profile"
+ON public.profiles
+FOR SELECT
 USING (auth.uid() = id);
 
-CREATE POLICY "Users can update their own profile" 
-ON public.profiles 
-FOR UPDATE 
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
+CREATE POLICY "Users can update their own profile"
+ON public.profiles
+FOR UPDATE
 USING (auth.uid() = id);
 
-CREATE POLICY "Users can insert their own profile" 
-ON public.profiles 
-FOR INSERT 
+DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
+CREATE POLICY "Users can insert their own profile"
+ON public.profiles
+FOR INSERT
 WITH CHECK (auth.uid() = id);
 
 -- Create saved_models table
-CREATE TABLE public.saved_models (
+CREATE TABLE IF NOT EXISTS public.saved_models (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   model_name TEXT NOT NULL,
@@ -49,28 +52,32 @@ CREATE TABLE public.saved_models (
 ALTER TABLE public.saved_models ENABLE ROW LEVEL SECURITY;
 
 -- Saved models policies
-CREATE POLICY "Users can view their own models" 
-ON public.saved_models 
-FOR SELECT 
+DROP POLICY IF EXISTS "Users can view their own models" ON public.saved_models;
+CREATE POLICY "Users can view their own models"
+ON public.saved_models
+FOR SELECT
 USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can create their own models" 
-ON public.saved_models 
-FOR INSERT 
+DROP POLICY IF EXISTS "Users can create their own models" ON public.saved_models;
+CREATE POLICY "Users can create their own models"
+ON public.saved_models
+FOR INSERT
 WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can update their own models" 
-ON public.saved_models 
-FOR UPDATE 
+DROP POLICY IF EXISTS "Users can update their own models" ON public.saved_models;
+CREATE POLICY "Users can update their own models"
+ON public.saved_models
+FOR UPDATE
 USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can delete their own models" 
-ON public.saved_models 
-FOR DELETE 
+DROP POLICY IF EXISTS "Users can delete their own models" ON public.saved_models;
+CREATE POLICY "Users can delete their own models"
+ON public.saved_models
+FOR DELETE
 USING (auth.uid() = user_id);
 
 -- Create model_segments table
-CREATE TABLE public.model_segments (
+CREATE TABLE IF NOT EXISTS public.model_segments (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   model_id UUID NOT NULL REFERENCES public.saved_models(id) ON DELETE CASCADE,
   segment TEXT NOT NULL,
@@ -91,46 +98,50 @@ CREATE TABLE public.model_segments (
 ALTER TABLE public.model_segments ENABLE ROW LEVEL SECURITY;
 
 -- Model segments policies
-CREATE POLICY "Users can view segments of their own models" 
-ON public.model_segments 
-FOR SELECT 
+DROP POLICY IF EXISTS "Users can view segments of their own models" ON public.model_segments;
+CREATE POLICY "Users can view segments of their own models"
+ON public.model_segments
+FOR SELECT
 USING (
   EXISTS (
-    SELECT 1 FROM public.saved_models 
-    WHERE saved_models.id = model_segments.model_id 
+    SELECT 1 FROM public.saved_models
+    WHERE saved_models.id = model_segments.model_id
     AND saved_models.user_id = auth.uid()
   )
 );
 
-CREATE POLICY "Users can create segments for their own models" 
-ON public.model_segments 
-FOR INSERT 
+DROP POLICY IF EXISTS "Users can create segments for their own models" ON public.model_segments;
+CREATE POLICY "Users can create segments for their own models"
+ON public.model_segments
+FOR INSERT
 WITH CHECK (
   EXISTS (
-    SELECT 1 FROM public.saved_models 
-    WHERE saved_models.id = model_segments.model_id 
+    SELECT 1 FROM public.saved_models
+    WHERE saved_models.id = model_segments.model_id
     AND saved_models.user_id = auth.uid()
   )
 );
 
-CREATE POLICY "Users can update segments of their own models" 
-ON public.model_segments 
-FOR UPDATE 
+DROP POLICY IF EXISTS "Users can update segments of their own models" ON public.model_segments;
+CREATE POLICY "Users can update segments of their own models"
+ON public.model_segments
+FOR UPDATE
 USING (
   EXISTS (
-    SELECT 1 FROM public.saved_models 
-    WHERE saved_models.id = model_segments.model_id 
+    SELECT 1 FROM public.saved_models
+    WHERE saved_models.id = model_segments.model_id
     AND saved_models.user_id = auth.uid()
   )
 );
 
-CREATE POLICY "Users can delete segments of their own models" 
-ON public.model_segments 
-FOR DELETE 
+DROP POLICY IF EXISTS "Users can delete segments of their own models" ON public.model_segments;
+CREATE POLICY "Users can delete segments of their own models"
+ON public.model_segments
+FOR DELETE
 USING (
   EXISTS (
-    SELECT 1 FROM public.saved_models 
-    WHERE saved_models.id = model_segments.model_id 
+    SELECT 1 FROM public.saved_models
+    WHERE saved_models.id = model_segments.model_id
     AND saved_models.user_id = auth.uid()
   )
 );
@@ -152,6 +163,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
@@ -165,11 +177,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SET search_path = public;
 
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
 CREATE TRIGGER update_profiles_updated_at
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_saved_models_updated_at ON public.saved_models;
 CREATE TRIGGER update_saved_models_updated_at
   BEFORE UPDATE ON public.saved_models
   FOR EACH ROW
@@ -177,31 +191,36 @@ CREATE TRIGGER update_saved_models_updated_at
 
 -- Migration: 20251030162342
 -- Add columns to store CSV data and forecast results
-ALTER TABLE saved_models 
-ADD COLUMN csv_data jsonb,
-ADD COLUMN forecast_results jsonb;
+ALTER TABLE saved_models
+ADD COLUMN IF NOT EXISTS csv_data jsonb,
+ADD COLUMN IF NOT EXISTS forecast_results jsonb;
 
 -- Migration: 20251030162922
 -- Create storage bucket for model pickle files
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('model-files', 'model-files', false);
+VALUES ('model-files', 'model-files', false)
+ON CONFLICT (id) DO NOTHING;
 
 -- Create RLS policies for model files
+DROP POLICY IF EXISTS "Users can view their own model files" ON storage.objects;
 CREATE POLICY "Users can view their own model files"
 ON storage.objects
 FOR SELECT
 USING (bucket_id = 'model-files' AND auth.uid()::text = (storage.foldername(name))[1]);
 
+DROP POLICY IF EXISTS "Users can upload their own model files" ON storage.objects;
 CREATE POLICY "Users can upload their own model files"
 ON storage.objects
 FOR INSERT
 WITH CHECK (bucket_id = 'model-files' AND auth.uid()::text = (storage.foldername(name))[1]);
 
+DROP POLICY IF EXISTS "Users can update their own model files" ON storage.objects;
 CREATE POLICY "Users can update their own model files"
 ON storage.objects
 FOR UPDATE
 USING (bucket_id = 'model-files' AND auth.uid()::text = (storage.foldername(name))[1]);
 
+DROP POLICY IF EXISTS "Users can delete their own model files" ON storage.objects;
 CREATE POLICY "Users can delete their own model files"
 ON storage.objects
 FOR DELETE
@@ -209,11 +228,11 @@ USING (bucket_id = 'model-files' AND auth.uid()::text = (storage.foldername(name
 
 -- Add column to store pickle file path
 ALTER TABLE saved_models
-ADD COLUMN model_file_path text;
+ADD COLUMN IF NOT EXISTS model_file_path text;
 
 -- Migration: 20251031095143
 -- Create table for storing forecast reports
-CREATE TABLE public.forecast_reports (
+CREATE TABLE IF NOT EXISTS public.forecast_reports (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID NOT NULL,
   model_id UUID,
@@ -228,21 +247,24 @@ CREATE TABLE public.forecast_reports (
 ALTER TABLE public.forecast_reports ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for user access
-CREATE POLICY "Users can view their own reports" 
-ON public.forecast_reports 
-FOR SELECT 
+DROP POLICY IF EXISTS "Users can view their own reports" ON public.forecast_reports;
+CREATE POLICY "Users can view their own reports"
+ON public.forecast_reports
+FOR SELECT
 USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can create their own reports" 
-ON public.forecast_reports 
-FOR INSERT 
+DROP POLICY IF EXISTS "Users can create their own reports" ON public.forecast_reports;
+CREATE POLICY "Users can create their own reports"
+ON public.forecast_reports
+FOR INSERT
 WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can delete their own reports" 
-ON public.forecast_reports 
-FOR DELETE 
+DROP POLICY IF EXISTS "Users can delete their own reports" ON public.forecast_reports;
+CREATE POLICY "Users can delete their own reports"
+ON public.forecast_reports
+FOR DELETE
 USING (auth.uid() = user_id);
 
 -- Create index for better performance
-CREATE INDEX idx_forecast_reports_user_id ON public.forecast_reports(user_id);
-CREATE INDEX idx_forecast_reports_created_at ON public.forecast_reports(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_forecast_reports_user_id ON public.forecast_reports(user_id);
+CREATE INDEX IF NOT EXISTS idx_forecast_reports_created_at ON public.forecast_reports(created_at DESC);

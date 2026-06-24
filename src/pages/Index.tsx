@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { ModelSelector } from "@/components/forecast/ModelSelector";
 import { VariableConfig } from "@/components/forecast/VariableConfig";
 import { ProphetHyperparameters } from "@/components/forecast/ProphetHyperparameters";
@@ -17,301 +20,23 @@ import { ForecastProgress } from "@/components/forecast/ForecastProgress";
 import { ForecastResults } from "@/components/forecast/ForecastResults";
 import { PerformanceMetricSelector } from "@/components/forecast/PerformanceMetricSelector";
 import { DataAnalysisTools } from "@/components/forecast/DataAnalysisTools";
-// import { SaveModelDialog } from "@/components/forecast/SaveModelDialog";
+import { SaveModelDialog } from "@/components/forecast/SaveModelDialog";
 import { ModelDownload } from "@/components/forecast/ModelDownload";
 
-import { ChevronRight, Play, Save, LogOut, Library, Wand2, Loader2 } from "lucide-react";
+import { ChevronRight, Play, Save, LogOut, Wand2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import type { ForecastModel, ProphetParameters, SegmentConfig, PerformanceMetric, ForecastConfig } from "@/types/forecast";
+import type { ForecastModel, SegmentConfig, PerformanceMetric, ForecastConfig } from "@/types/forecast";
 import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
+import { submitForecast, pollForecastJob, type ForecastJobPayload } from "@/lib/forecastClient";
 
-// Helper function to generate mock forecast results
-const generateMockForecast = (
-  trainingData: any[],
-  testData: any[],
-  segment: SegmentConfig,
-  dateColumn: string,
-  dependentVariable: string,
-  prophetParams: ProphetParameters,
-  selectedMetrics: PerformanceMetric[]
-) => {
-  const lowerPercentile = prophetParams.lower_bound ?? (1 - prophetParams.interval_width) / 2;
-  const upperPercentile = prophetParams.upper_bound ?? (1 + prophetParams.interval_width) / 2;
-
-  const parseNumeric = (value: any): number => {
-    if (typeof value === "number") return value;
-    const parsed = parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : NaN;
-  };
-
-  const isValidNumber = (value: any): value is number => {
-    return typeof value === "number" && !isNaN(value) && isFinite(value);
-  };
-
-  // Training data with actual values (may include NaN, filtered later)
-  const training = trainingData.map((row) => {
-    const actual = parseNumeric(row[dependentVariable]);
-    return {
-      date: row[dateColumn],
-      actual,
-      predicted: actual,
-      lower_bound: isValidNumber(actual) ? actual * 0.95 : NaN,
-      upper_bound: isValidNumber(actual) ? actual * 1.05 : NaN,
-    };
-  });
-
-  // Test data with predictions
-  const test = testData.map((row) => {
-    const actual = parseNumeric(row[dependentVariable]);
-    const noise = (Math.random() - 0.5) * 0.1;
-    const predicted = isValidNumber(actual) ? actual * (1 + noise) : NaN;
-    const intervalWidth = upperPercentile - lowerPercentile;
-    return {
-      date: row[dateColumn],
-      actual,
-      predicted,
-      lower_bound: isValidNumber(predicted)
-        ? predicted * (1 - intervalWidth / 2)
-        : NaN,
-      upper_bound: isValidNumber(predicted)
-        ? predicted * (1 + intervalWidth / 2)
-        : NaN,
-      is_test: true,
-    };
-  });
-
-  // Generate forecast data using only valid training values
-  const lastDateSource = testData.length > 0 ? testData : trainingData;
-  const lastDate =
-    lastDateSource.length > 0
-      ? new Date(lastDateSource[lastDateSource.length - 1][dateColumn])
-      : new Date();
-
-  const validTrainingForAvg = training.filter((t) => isValidNumber(t.actual));
-  const avgValue =
-    validTrainingForAvg.length > 0
-      ? validTrainingForAvg.reduce((sum, t) => sum + (t.actual as number), 0) /
-        validTrainingForAvg.length
-      : NaN;
-
-  const forecast: any[] = [];
-
-  if (isValidNumber(avgValue)) {
-    for (let i = 1; i <= segment.forecast_periods; i++) {
-      const forecastDate = new Date(lastDate);
-      forecastDate.setMonth(forecastDate.getMonth() + i);
-
-      const trend = 1 + i * 0.005;
-      const seasonality = Math.sin((i / 6) * Math.PI) * 0.1;
-      const predicted = avgValue * trend * (1 + seasonality);
-      const intervalWidth = upperPercentile - lowerPercentile;
-
-      forecast.push({
-        date: forecastDate.toISOString().split("T")[0],
-        predicted,
-        lower_bound:
-          predicted * (1 - intervalWidth / 2 - i * 0.01),
-        upper_bound:
-          predicted * (1 + intervalWidth / 2 + i * 0.01),
-        is_forecast: true,
-      });
-    }
-  }
-
-  // Calculate all requested metrics
-  const metrics: any = {};
-
-  // Filter to only valid numeric test points for metrics
-  const validTest = test.filter(
-    (t) => isValidNumber(t.actual) && isValidNumber(t.predicted)
-  );
-
-  if (validTest.length === 0) {
-    console.log(
-      `[Metrics Calculation] Segment: ${segment.segmentValue} - No valid test data available`
-    );
-    selectedMetrics.forEach((metric) => {
-      metrics[metric] = undefined;
-    });
-  } else {
-    const actualValues = validTest.map((t) => t.actual as number);
-    const predictedValues = validTest.map((t) => t.predicted as number);
-    const errors = validTest.map(
-      (_t, i) => actualValues[i] - predictedValues[i]
-    );
-
-    console.log(`[Metrics Calculation] Segment: ${segment.segmentValue}`);
-    console.log(
-      `[Metrics Calculation] Test data points: ${validTest.length}`
-    );
-    console.log(
-      `[Metrics Calculation] Selected metrics:`,
-      selectedMetrics
-    );
-    console.log(
-      `[Metrics Calculation] Actual values sample:`,
-      actualValues.slice(0, 3)
-    );
-    console.log(
-      `[Metrics Calculation] Predicted values sample:`,
-      predictedValues.slice(0, 3)
-    );
-    console.log(
-      `[Metrics Calculation] Errors sample:`,
-      errors.slice(0, 3)
-    );
-
-    if (selectedMetrics.includes("mae")) {
-      metrics.mae =
-        errors.reduce((sum, e) => sum + Math.abs(e), 0) / errors.length;
-      console.log(`[Metrics Calculation] MAE calculated:`, metrics.mae);
-    }
-    if (selectedMetrics.includes("mse")) {
-      metrics.mse =
-        errors.reduce((sum, e) => sum + e * e, 0) / errors.length;
-      console.log(`[Metrics Calculation] MSE calculated:`, metrics.mse);
-    }
-    if (selectedMetrics.includes("rmse")) {
-      metrics.rmse = Math.sqrt(
-        errors.reduce((sum, e) => sum + e * e, 0) / errors.length
-      );
-      console.log(`[Metrics Calculation] RMSE calculated:`, metrics.rmse);
-    }
-    if (selectedMetrics.includes("mape")) {
-      const mapeSamples = actualValues
-        .map((v, i) => ({ v, e: errors[i] }))
-        .filter((x) => x.v !== 0);
-      if (mapeSamples.length > 0) {
-        metrics.mape =
-          mapeSamples.reduce(
-            (sum, x) => sum + Math.abs(x.e / x.v) * 100,
-            0
-          ) / mapeSamples.length;
-      } else {
-        metrics.mape = undefined;
-      }
-      console.log(`[Metrics Calculation] MAPE calculated:`, metrics.mape);
-    }
-    if (selectedMetrics.includes("smape")) {
-      const smapeSamples = actualValues
-        .map((v, i) => ({ v, p: predictedValues[i], e: errors[i] }))
-        .filter((x) => Math.abs(x.v) + Math.abs(x.p) > 0);
-      if (smapeSamples.length > 0) {
-        metrics.smape =
-          smapeSamples.reduce((sum, x) => {
-            const denominator =
-              (Math.abs(x.v) + Math.abs(x.p)) / 2;
-            return sum + (Math.abs(x.e) / denominator) * 100;
-          }, 0) / smapeSamples.length;
-      } else {
-        metrics.smape = undefined;
-      }
-      console.log(`[Metrics Calculation] SMAPE calculated:`, metrics.smape);
-    }
-    if (selectedMetrics.includes("r2")) {
-      const mean =
-        actualValues.reduce((s, v) => s + v, 0) / actualValues.length;
-      const ssRes = errors.reduce((s, e) => s + e * e, 0);
-      const ssTot = actualValues.reduce(
-        (s, v) => s + Math.pow(v - mean, 2),
-        0
-      );
-      metrics.r2 = ssTot === 0 ? undefined : 1 - ssRes / ssTot;
-      console.log(`[Metrics Calculation] R² calculated:`, metrics.r2);
-    }
-    if (selectedMetrics.includes("adj_r2")) {
-      const n = actualValues.length;
-      const p = segment.regressors.length; // number of predictors
-      if (metrics.r2 !== undefined && n > p + 1) {
-        metrics.adj_r2 =
-          1 - ((1 - metrics.r2) * (n - 1)) / (n - p - 1);
-      } else {
-        metrics.adj_r2 = undefined;
-      }
-      console.log(
-        `[Metrics Calculation] Adjusted R² calculated:`,
-        metrics.adj_r2
-      );
-    }
-    if (selectedMetrics.includes("coverage")) {
-      const coverageSamples = validTest.filter(
-        (t) =>
-          isValidNumber(t.lower_bound) && isValidNumber(t.upper_bound)
-      );
-      if (coverageSamples.length > 0) {
-        metrics.coverage =
-          (coverageSamples.filter(
-            (t) =>
-              (t.actual as number) >= (t.lower_bound as number) &&
-              (t.actual as number) <= (t.upper_bound as number)
-          ).length /
-            coverageSamples.length) *
-          100;
-      } else {
-        metrics.coverage = undefined;
-      }
-      console.log(
-        `[Metrics Calculation] Coverage calculated:`,
-        metrics.coverage
-      );
-    }
-    if (selectedMetrics.includes("mase")) {
-      const naiveErrors = actualValues
-        .slice(1)
-        .map((v, i) => Math.abs(v - actualValues[i]));
-      const meanNaiveError =
-        naiveErrors.length > 0
-          ? naiveErrors.reduce((s, e) => s + e, 0) / naiveErrors.length
-          : 0;
-      if (meanNaiveError > 0) {
-        metrics.mase =
-          (errors.reduce((s, e) => s + Math.abs(e), 0) / errors.length) /
-          meanNaiveError;
-      } else {
-        metrics.mase = undefined;
-      }
-      console.log(`[Metrics Calculation] MASE calculated:`, metrics.mase);
-    }
-
-    console.log(`[Metrics Calculation] Final metrics object:`, metrics);
-  }
-
-  // AI Commentary
-  const ai_commentary =
-    `Performance Analysis:\n\n` +
-    `The model shows ${
-      metrics.mape < 10 ? "excellent" : metrics.mape < 20 ? "good" : "moderate"
-    } accuracy with MAPE of ${metrics.mape?.toFixed(1)}%. ` +
-    `${
-      metrics.coverage > 90
-        ? "Confidence intervals effectively capture uncertainty."
-        : "Consider adjusting interval width."
-    }\n\n` +
-    `The ${
-      metrics.r2 > 0.8 ? "strong" : metrics.r2 > 0.6 ? "moderate" : "weak"
-    } R² of ${metrics.r2?.toFixed(3)} indicates ` +
-    `${
-      metrics.r2 > 0.8
-        ? "the model captures most variance in the data"
-        : "there may be room for improvement"
-    }.`;
-
-  return {
-    segment: segment.segment,
-    segmentValue: segment.segmentValue,
-    training_data: training,
-    test_data: test,
-    forecast_data: forecast,
-    metrics,
-    ai_commentary,
-  };
-};
 
 const Index = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("upload");
   const [selectedModel, setSelectedModel] = useState<ForecastModel>("prophet");
+  const [benchmarkEnabled, setBenchmarkEnabled] = useState(false);
+  const [benchmarkModel, setBenchmarkModel] = useState<ForecastModel>("autogluon");
   const [dateColumn, setDateColumn] = useState("");
   const [segmentColumn, setSegmentColumn] = useState("");
   const [dependentVariable, setDependentVariable] = useState("");
@@ -591,285 +316,70 @@ const Index = () => {
       toast.error("Please configure at least one segment");
       return;
     }
-
     if (!dateColumn || !segmentColumn || !dependentVariable) {
       toast.error("Please configure all required columns");
       return;
     }
 
-    setIsRunning(true);
-    setForecastResults(null);
-    const progress = segments.map(s => ({
-      segment: s.segment,
-      status: 'pending' as const,
-      progress: 0,
-    }));
-    setSegmentProgress(progress);
-    setActiveTab("progress");
-
-    const allResults: any[] = [];
-
-    // Process each segment
-    for (let i = 0; i < segments.length; i++) {
-      const segment = segments[i];
-      
-      // Filter and sort data for this segment
-      const rawSegmentData = csvData
-        .filter(row => row[segmentColumn] === segment.segmentValue)
-        .sort((a, b) => new Date(a[dateColumn]).getTime() - new Date(b[dateColumn]).getTime());
-      
-      // Get analysis state and apply transformations if available
-      const analysisState = segmentAnalysisStates[segment.segmentValue];
-      let transformedSegmentData = rawSegmentData;
-      let transformationsSummary: string[] = [];
-      let hasTransformations = false;
-      
-      if (analysisState && Object.keys(analysisState).length > 0) {
-        const { applyAnalysisTransformations } = await import('@/utils/dataAnalysis');
-        const result = applyAnalysisTransformations(
-          JSON.parse(JSON.stringify(rawSegmentData)), // Deep clone
-          dateColumn,
-          dependentVariable,
-          segment.regressors.map(r => r.name),
-          analysisState
-        );
-        transformedSegmentData = result.transformedData;
-        transformationsSummary = result.transformationsSummary;
-        hasTransformations = transformationsSummary.length > 0;
-      }
-      
-      // Prepare both raw and transformed datasets
-      const rawTrainingData = rawSegmentData.slice(0, segment.training_records);
-      const rawTestData = rawSegmentData.slice(segment.training_records, segment.training_records + segment.test_records);
-      
-      const transformedTrainingData = transformedSegmentData.slice(0, segment.training_records);
-      const transformedTestData = transformedSegmentData.slice(segment.training_records, segment.training_records + segment.test_records);
-      
-      // Get recommended model from analysis if available
-      const recommendedModel = analysisState?.dependent?.recommendedModel;
-      const shouldRunBenchmark = recommendedModel && recommendedModel !== selectedModel;
-      
-      // Update status to running
-      setSegmentProgress(prev => 
-        prev.map((p, idx) => 
-          idx === i ? { 
-            ...p, 
-            status: 'running', 
-            progress: 0, 
-            message: `Using ${transformedTrainingData.length} records for training, ${transformedTestData.length} for testing${hasTransformations ? ' (with transformations)' : ''}${shouldRunBenchmark ? ` + benchmark (${recommendedModel})` : ''}` 
-          } : p
-        )
-      );
-
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Simulate model training stages
-      const stages = shouldRunBenchmark 
-        ? [
-            { progress: 10, message: hasTransformations ? `Applying transformations...` : `Preparing data...` },
-            { progress: 18, message: `Training ${selectedModel} (transformed) on ${transformedTrainingData.length} records...` },
-            { progress: 28, message: `Validating ${selectedModel} (transformed) on ${transformedTestData.length} test records...` },
-            { progress: 38, message: `Forecasting ${segment.forecast_periods} periods (transformed)...` },
-            { progress: 50, message: hasTransformations ? `Training ${selectedModel} (raw data)...` : `Computing metrics...` },
-            { progress: 60, message: hasTransformations ? `Validating ${selectedModel} (raw data)...` : `Preparing benchmark...` },
-            { progress: 70, message: `Training benchmark ${recommendedModel}...` },
-            { progress: 85, message: `Validating benchmark ${recommendedModel}...` },
-            { progress: 100, message: 'Complete' },
-          ]
-        : [
-            { progress: 15, message: hasTransformations ? `Applying transformations...` : `Preparing data...` },
-            { progress: 35, message: `Training on ${transformedTrainingData.length} records (transformed)...` },
-            { progress: 55, message: `Validating on ${transformedTestData.length} test records (transformed)...` },
-            { progress: 75, message: hasTransformations ? `Running forecast on raw data for comparison...` : `Forecasting...` },
-            { progress: 90, message: `Forecasting ${segment.forecast_periods} periods...` },
-            { progress: 100, message: 'Complete' },
-          ];
-
-      for (const stage of stages) {
-        await new Promise(resolve => setTimeout(resolve, shouldRunBenchmark ? 500 : 600));
-        setSegmentProgress(prev =>
-          prev.map((p, idx) =>
-            idx === i ? { ...p, progress: stage.progress, message: stage.message } : p
-          )
-        );
-      }
-
-      // Mark as completed
-      setSegmentProgress(prev =>
-        prev.map((p, idx) =>
-          idx === i ? { ...p, status: 'completed', progress: 100 } : p
-        )
-      );
-
-      // Generate forecast results with TRANSFORMED data (primary)
-      const prophetParams = segment.prophet_params || {
-        growth: 'linear' as const,
-        changepoint_prior_scale: 0.05,
-        seasonality_mode: 'additive' as const,
-        seasonality_prior_scale: 10,
-        yearly_seasonality: true,
-        weekly_seasonality: false,
-        daily_seasonality: false,
-        changepoint_range: 0.8,
-        cv_initial: 730,
-        cv_period: 180,
-        cv_horizon: 365,
-        custom_seasonalities: [],
-        interval_width: 0.80,
-        lower_bound: undefined,
-        upper_bound: undefined,
-      };
-      
-      const mockResults = generateMockForecast(
-        transformedTrainingData,
-        transformedTestData,
-        segment,
-        dateColumn,
-        dependentVariable,
-        prophetParams,
-        selectedMetrics
-      ) as any;
-      mockResults.model = selectedModel;
-      mockResults.transformations_applied = transformationsSummary;
-      mockResults.interval_width = prophetParams.interval_width;
-      mockResults.lower_bound = prophetParams.lower_bound;
-      mockResults.upper_bound = prophetParams.upper_bound;
-
-      // Generate forecast results with RAW data (for comparison)
-      if (hasTransformations) {
-        const rawResults = generateMockForecast(
-          rawTrainingData,
-          rawTestData,
-          segment,
-          dateColumn,
-          dependentVariable,
-          prophetParams,
-          selectedMetrics
-        );
-        
-        mockResults.raw_training_data = rawResults.training_data;
-        mockResults.raw_test_data = rawResults.test_data;
-        mockResults.raw_forecast_data = rawResults.forecast_data;
-        mockResults.raw_metrics = rawResults.metrics;
-      }
-
-      // Run benchmark model if recommended and different from selected
-      if (shouldRunBenchmark) {
-        const benchmarkResults = generateMockForecast(
-          transformedTrainingData,
-          transformedTestData,
-          segment,
-          dateColumn,
-          dependentVariable,
-          prophetParams,
-          selectedMetrics
-        );
-        
-        // Add slight variations to benchmark to simulate different model behavior
-        mockResults.benchmark_model = recommendedModel;
-        mockResults.benchmark_training_data = benchmarkResults.training_data.map(p => ({
-          ...p,
-          predicted: p.predicted * (1 + (Math.random() - 0.5) * 0.05)
-        }));
-        mockResults.benchmark_test_data = benchmarkResults.test_data.map(p => ({
-          ...p,
-          predicted: p.predicted * (1 + (Math.random() - 0.5) * 0.08),
-          lower_bound: p.lower_bound * (1 + (Math.random() - 0.5) * 0.08),
-          upper_bound: p.upper_bound * (1 + (Math.random() - 0.5) * 0.08)
-        }));
-        mockResults.benchmark_forecast_data = benchmarkResults.forecast_data.map(p => ({
-          ...p,
-          predicted: p.predicted * (1 + (Math.random() - 0.5) * 0.1),
-          lower_bound: p.lower_bound * (1 + (Math.random() - 0.5) * 0.1),
-          upper_bound: p.upper_bound * (1 + (Math.random() - 0.5) * 0.1)
-        }));
-        
-        // Recalculate metrics for benchmark
-        const benchmarkActuals = mockResults.benchmark_test_data.map(t => t.actual!);
-        const benchmarkPredicted = mockResults.benchmark_test_data.map(t => t.predicted);
-        const benchmarkErrors = mockResults.benchmark_test_data.map((t, i) => t.actual! - t.predicted);
-        
-        const benchmarkMAE = benchmarkErrors.reduce((sum, e) => sum + Math.abs(e), 0) / benchmarkErrors.length;
-        const benchmarkMSE = benchmarkErrors.reduce((sum, e) => sum + e * e, 0) / benchmarkErrors.length;
-        const benchmarkRMSE = Math.sqrt(benchmarkMSE);
-        const benchmarkMAPE = benchmarkErrors.reduce((sum, e, i) => 
-          sum + Math.abs(e / benchmarkActuals[i]) * 100, 0) / benchmarkErrors.length;
-        
-        // Calculate all selected metrics for benchmark
-        const benchmarkMetrics: any = {};
-        
-        if (selectedMetrics.includes('mae')) benchmarkMetrics.mae = benchmarkMAE;
-        if (selectedMetrics.includes('mse')) benchmarkMetrics.mse = benchmarkMSE;
-        if (selectedMetrics.includes('rmse')) benchmarkMetrics.rmse = benchmarkRMSE;
-        if (selectedMetrics.includes('mape')) benchmarkMetrics.mape = benchmarkMAPE;
-        
-        if (selectedMetrics.includes('smape')) {
-          benchmarkMetrics.smape = benchmarkErrors.reduce((sum, e, i) => {
-            const denominator = (Math.abs(benchmarkActuals[i]) + Math.abs(benchmarkPredicted[i])) / 2;
-            return sum + Math.abs(e) / denominator * 100;
-          }, 0) / benchmarkErrors.length;
-        }
-        
-        if (selectedMetrics.includes('r2')) {
-          const mean = benchmarkActuals.reduce((s, v) => s + v, 0) / benchmarkActuals.length;
-          const ssRes = benchmarkErrors.reduce((s, e) => s + e * e, 0);
-          const ssTot = benchmarkActuals.reduce((s, v) => s + Math.pow(v - mean, 2), 0);
-          benchmarkMetrics.r2 = 1 - (ssRes / ssTot);
-        }
-        
-        if (selectedMetrics.includes('adj_r2')) {
-          const mean = benchmarkActuals.reduce((s, v) => s + v, 0) / benchmarkActuals.length;
-          const ssRes = benchmarkErrors.reduce((s, e) => s + e * e, 0);
-          const ssTot = benchmarkActuals.reduce((s, v) => s + Math.pow(v - mean, 2), 0);
-          const r2 = 1 - (ssRes / ssTot);
-          const n = benchmarkActuals.length;
-          const p = segment.regressors.length;
-          benchmarkMetrics.adj_r2 = 1 - ((1 - r2) * (n - 1) / (n - p - 1));
-        }
-        
-        if (selectedMetrics.includes('coverage')) {
-          benchmarkMetrics.coverage = mockResults.benchmark_test_data.filter(
-            t => t.actual! >= t.lower_bound && t.actual! <= t.upper_bound
-          ).length / mockResults.benchmark_test_data.length * 100;
-        }
-        
-        if (selectedMetrics.includes('mase')) {
-          const naiveErrors = benchmarkActuals.slice(1).map((v, i) => Math.abs(v - benchmarkActuals[i]));
-          const meanNaiveError = naiveErrors.reduce((s, e) => s + e, 0) / naiveErrors.length;
-          benchmarkMetrics.mase = (benchmarkErrors.reduce((s, e) => s + Math.abs(e), 0) / benchmarkErrors.length) / meanNaiveError;
-        }
-        
-        mockResults.benchmark_metrics = benchmarkMetrics;
-      }
-      
-      allResults.push(mockResults);
-
-      console.log(`Completed forecast for segment: ${segment.segment}`, {
-        model: selectedModel,
-        segmentValue: segment.segmentValue,
-        totalRecords: transformedSegmentData.length,
-        trainingRecords: transformedTrainingData.length,
-        testRecords: transformedTestData.length,
-        forecastPeriods: segment.forecast_periods,
-        frequency: segment.frequency,
-        hasTransformations,
-        transformationsSummary,
-        config: segment,
-        parameters: selectedModel === 'prophet' ? (segment.prophet_params || null) : null,
-      });
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) {
+      toast.error("Please sign in again");
+      return;
     }
 
-    // Store results
-    const results: ForecastResultsType = {
-      segments: allResults,
-      model: selectedModel,
-      timestamp: new Date().toISOString(),
-    };
-    setForecastResults(results);
+    setIsRunning(true);
+    setForecastResults(null);
+    setSegmentProgress(
+      segments.map((s) => ({ segment: s.segment, status: "pending" as const, progress: 0 })),
+    );
+    setActiveTab("progress");
 
-    setIsRunning(false);
-    toast.success(`Successfully completed forecasts for ${segments.length} segments`);
-    setActiveTab("results");
+    try {
+      const payload: ForecastJobPayload = {
+        model: selectedModel,
+        date_column: dateColumn,
+        segment_column: segmentColumn,
+        dependent_variable: dependentVariable,
+        metrics: selectedMetrics,
+        benchmark_model:
+          benchmarkEnabled && benchmarkModel !== selectedModel ? benchmarkModel : undefined,
+        data: csvData,
+        segments: segments.map((s) => ({
+          segmentValue: s.segmentValue,
+          segment: s.segment,
+          forecast_periods: s.forecast_periods,
+          frequency: s.frequency,
+          training_records: s.training_records,
+          test_records: s.test_records,
+          prophet_params: (s.prophet_params as unknown as Record<string, unknown>) ?? null,
+        })),
+      };
+
+      // mark all running so the progress UI shows activity
+      setSegmentProgress((prev) =>
+        prev.map((p) => ({ ...p, status: "running", progress: 0, message: "Submitting job..." })),
+      );
+
+      const jobId = await submitForecast(payload, accessToken);
+
+      const results = await pollForecastJob(jobId, (progress) => {
+        setSegmentProgress((prev) => prev.map((p) => ({ ...p, progress })));
+      });
+
+      setSegmentProgress((prev) =>
+        prev.map((p) => ({ ...p, status: "completed", progress: 100 })),
+      );
+      setForecastResults(results as any);
+      toast.success(`Forecast complete for ${results.segments.length} segment(s)`);
+      setActiveTab("results");
+    } catch (err) {
+      console.error("Forecast error:", err);
+      toast.error(err instanceof Error ? err.message : "Forecast failed");
+      setSegmentProgress((prev) => prev.map((p) => ({ ...p, status: "error" as const })));
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   return (
@@ -886,15 +396,10 @@ const Index = () => {
               </p>
             </div>
             <div className="flex gap-2">
-              {/* Temporarily disabled until database types sync */}
-              {/* <Button variant="outline" onClick={() => navigate("/models")}>
-                <Library className="mr-2 h-4 w-4" />
-                My Models
-              </Button>
               <Button variant="outline" onClick={handleSaveModel}>
                 <Save className="mr-2 h-4 w-4" />
                 {currentModelId ? "Update Model" : "Save Model"}
-              </Button> */}
+              </Button>
               <Button variant="outline" onClick={handleSignOut}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign Out
@@ -936,6 +441,44 @@ const Index = () => {
 
           <TabsContent value="model" className="space-y-6">
             <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Benchmark Comparison</CardTitle>
+                <CardDescription>
+                  Optionally fit a second model to compare side by side. Note: an AutoGluon
+                  benchmark roughly doubles run time.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <Switch
+                    id="benchmark-toggle"
+                    checked={benchmarkEnabled}
+                    onCheckedChange={setBenchmarkEnabled}
+                  />
+                  <Label htmlFor="benchmark-toggle">Compare against a benchmark model</Label>
+                </div>
+                {benchmarkEnabled && (
+                  <div className="space-y-2 max-w-xs">
+                    <Label htmlFor="benchmark-model">Benchmark model</Label>
+                    <Select value={benchmarkModel} onValueChange={(v) => setBenchmarkModel(v as ForecastModel)}>
+                      <SelectTrigger id="benchmark-model">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover">
+                        <SelectItem value="prophet">Facebook Prophet</SelectItem>
+                        <SelectItem value="autogluon">AWS AutoGluon</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {benchmarkModel === selectedModel && (
+                      <p className="text-xs text-destructive">
+                        Pick a model different from the primary ({selectedModel}).
+                      </p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
             <div className="flex justify-end">
               <Button onClick={() => setActiveTab("variables")}>
                 Next: Configure Variables
@@ -1191,8 +734,7 @@ const Index = () => {
           </TabsContent>
         </Tabs>
 
-        {/* Temporarily disabled until database types sync */}
-        {/* <SaveModelDialog
+        <SaveModelDialog
           open={saveDialogOpen}
           onOpenChange={setSaveDialogOpen}
           config={getCurrentConfig()}
@@ -1200,7 +742,11 @@ const Index = () => {
           existingModelName={currentModelName}
           csvData={csvData}
           forecastResults={forecastResults}
-        /> */}
+          onSaved={(modelId, modelName) => {
+            setCurrentModelId(modelId);
+            setCurrentModelName(modelName);
+          }}
+        />
       </div>
     </div>
   );

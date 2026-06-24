@@ -11,6 +11,7 @@ export interface ForecastPoint {
 export interface SegmentForecastResult {
   segment: string;
   segmentValue: string;
+  error?: string;
   training_data: ForecastPoint[];
   test_data: ForecastPoint[];
   forecast_data: ForecastPoint[];

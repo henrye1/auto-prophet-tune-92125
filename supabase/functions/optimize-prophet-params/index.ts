@@ -13,10 +13,10 @@ serve(async (req) => {
 
   try {
     const { segmentData, dateColumn, valueColumn, currentParams, frequency } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
     // Determine appropriate seasonality based on data frequency
@@ -99,134 +99,45 @@ Provide optimized parameters with explanations for each setting. Focus on:
 4. Cross-validation parameters
 5. Confidence intervals
 
-Return a structured response explaining each parameter optimization.`;
+Return a structured response explaining each parameter optimization.
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        temperature: 0.3,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { 
-            role: "user", 
-            content: `Current parameters: ${JSON.stringify(currentParams, null, 2)}
-            
-Please analyze and suggest optimizations.` 
-          }
-        ],
-        tools: [{
-          type: "function",
-          function: {
-            name: "optimize_prophet_parameters",
-            description: "Return optimized Prophet hyperparameters with explanations",
-            parameters: {
-              type: "object",
-              properties: {
-                growth: {
-                  type: "object",
-                  properties: {
-                    value: { type: "string", enum: ["linear", "logistic"] },
-                    explanation: { type: "string" },
-                    why_relevant: { type: "string" }
-                  },
-                  required: ["value", "explanation", "why_relevant"]
-                },
-                changepoint_prior_scale: {
-                  type: "object",
-                  properties: {
-                    value: { type: "number" },
-                    explanation: { type: "string" },
-                    why_relevant: { type: "string" }
-                  },
-                  required: ["value", "explanation", "why_relevant"]
-                },
-                seasonality_mode: {
-                  type: "object",
-                  properties: {
-                    value: { type: "string", enum: ["additive", "multiplicative"] },
-                    explanation: { type: "string" },
-                    why_relevant: { type: "string" }
-                  },
-                  required: ["value", "explanation", "why_relevant"]
-                },
-                seasonality_prior_scale: {
-                  type: "object",
-                  properties: {
-                    value: { type: "number" },
-                    explanation: { type: "string" },
-                    why_relevant: { type: "string" }
-                  },
-                  required: ["value", "explanation", "why_relevant"]
-                },
-                yearly_seasonality: {
-                  type: "object",
-                  properties: {
-                    value: { type: ["boolean", "number"] },
-                    explanation: { type: "string" },
-                    why_relevant: { type: "string" }
-                  },
-                  required: ["value", "explanation", "why_relevant"]
-                },
-                weekly_seasonality: {
-                  type: "object",
-                  properties: {
-                    value: { type: ["boolean", "number"] },
-                    explanation: { type: "string" },
-                    why_relevant: { type: "string" }
-                  },
-                  required: ["value", "explanation", "why_relevant"]
-                },
-                daily_seasonality: {
-                  type: "object",
-                  properties: {
-                    value: { type: ["boolean", "number"] },
-                    explanation: { type: "string" },
-                    why_relevant: { type: "string" }
-                  },
-                  required: ["value", "explanation", "why_relevant"]
-                },
-                changepoint_range: {
-                  type: "object",
-                  properties: {
-                    value: { type: "number" },
-                    explanation: { type: "string" },
-                    why_relevant: { type: "string" }
-                  },
-                  required: ["value", "explanation", "why_relevant"]
-                },
-                interval_width: {
-                  type: "object",
-                  properties: {
-                    value: { type: "number" },
-                    explanation: { type: "string" },
-                    why_relevant: { type: "string" }
-                  },
-                  required: ["value", "explanation", "why_relevant"]
-                }
-              },
-              required: [
-                "growth", 
-                "changepoint_prior_scale", 
-                "seasonality_mode", 
-                "seasonality_prior_scale",
-                "yearly_seasonality",
-                "weekly_seasonality",
-                "daily_seasonality",
-                "changepoint_range",
-                "interval_width"
-              ],
-              additionalProperties: false
-            }
-          }
-        }],
-        tool_choice: { type: "function", function: { name: "optimize_prophet_parameters" } }
-      }),
-    });
+Return ONLY valid JSON (no markdown, no extra text) in EXACTLY this shape. Every parameter is an object with "value", "explanation", and "why_relevant". For seasonality fields use either a boolean or an integer (number of Fourier terms):
+{
+  "growth": { "value": "linear" | "logistic", "explanation": "...", "why_relevant": "..." },
+  "changepoint_prior_scale": { "value": <number>, "explanation": "...", "why_relevant": "..." },
+  "seasonality_mode": { "value": "additive" | "multiplicative", "explanation": "...", "why_relevant": "..." },
+  "seasonality_prior_scale": { "value": <number>, "explanation": "...", "why_relevant": "..." },
+  "yearly_seasonality": { "value": <boolean|number>, "explanation": "...", "why_relevant": "..." },
+  "weekly_seasonality": { "value": <boolean|number>, "explanation": "...", "why_relevant": "..." },
+  "daily_seasonality": { "value": <boolean|number>, "explanation": "...", "why_relevant": "..." },
+  "changepoint_range": { "value": <number>, "explanation": "...", "why_relevant": "..." },
+  "interval_width": { "value": <number>, "explanation": "...", "why_relevant": "..." }
+}`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{
+            role: "user",
+            parts: [{
+              text: `Current parameters: ${JSON.stringify(currentParams, null, 2)}
+
+Please analyze and suggest optimizations.`,
+            }],
+          }],
+          generationConfig: {
+            temperature: 0.3,
+            responseMimeType: "application/json",
+          },
+        }),
+      }
+    );
 
     if (!response.ok) {
       if (response.status === 429) {
@@ -235,25 +146,22 @@ Please analyze and suggest optimizations.`
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required. Please add credits to your Lovable AI workspace." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
       const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      throw new Error("AI gateway error");
+      console.error("Gemini API error:", response.status, errorText);
+      throw new Error("Gemini API error");
     }
 
     const data = await response.json();
-    const toolCall = data.choices[0]?.message?.tool_calls?.[0];
-    
-    if (!toolCall) {
-      throw new Error("No tool call in AI response");
+    let aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!aiResponse) {
+      console.error("Unexpected Gemini response:", JSON.stringify(data));
+      throw new Error("No content in Gemini response");
     }
 
-    const optimizedParams = JSON.parse(toolCall.function.arguments);
+    aiResponse = aiResponse.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+
+    const optimizedParams = JSON.parse(aiResponse);
 
     return new Response(
       JSON.stringify({ optimizedParams }),
