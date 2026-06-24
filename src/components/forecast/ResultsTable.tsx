@@ -1,10 +1,7 @@
-import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Download } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import type { ForecastPoint } from "@/types/forecastResults";
 
 interface ResultsTableProps {
@@ -17,30 +14,20 @@ interface ResultsTableProps {
   benchmarkTrainingData?: ForecastPoint[];
   benchmarkTestData?: ForecastPoint[];
   benchmarkForecastData?: ForecastPoint[];
-  rawTrainingData?: ForecastPoint[];
-  rawTestData?: ForecastPoint[];
-  rawForecastData?: ForecastPoint[];
 }
 
-export const ResultsTable = ({ 
-  segment, 
-  trainingData, 
-  testData, 
+export const ResultsTable = ({
+  segment,
+  trainingData,
+  testData,
   forecastData,
   primaryModel,
   benchmarkModel,
   benchmarkTrainingData,
   benchmarkTestData,
   benchmarkForecastData,
-  rawTrainingData,
-  rawTestData,
-  rawForecastData
 }: ResultsTableProps) => {
-  const [activeView, setActiveView] = useState<'transformed' | 'raw'>('transformed');
-  const hasRawData = rawTrainingData && rawTestData && rawForecastData;
-  
   const allData = [...trainingData, ...testData, ...forecastData];
-  const allRawData = hasRawData ? [...rawTrainingData, ...rawTestData, ...rawForecastData] : [];
   const hasBenchmark = benchmarkModel && benchmarkTestData && benchmarkForecastData;
 
   const exportToCSV = () => {
@@ -48,7 +35,7 @@ export const ResultsTable = ({
       ? ["Date", "Actual", `${primaryModel}_Predicted`, `${primaryModel}_Lower`, `${primaryModel}_Upper`, `${benchmarkModel}_Predicted`, `${benchmarkModel}_Lower`, `${benchmarkModel}_Upper`, "Type"]
       : ["Date", "Actual", "Predicted", "Lower Bound", "Upper Bound", "Type"];
     
-    const rows = allData.map((point, idx) => {
+    const rows = allData.map((point) => {
       const benchmarkPoint = hasBenchmark ? (
         point.is_test 
           ? benchmarkTestData[testData.findIndex(t => t.date === point.date)]
@@ -175,28 +162,7 @@ export const ResultsTable = ({
         </div>
       </CardHeader>
       <CardContent>
-        {hasRawData ? (
-          <Tabs value={activeView} onValueChange={(v) => setActiveView(v as 'transformed' | 'raw')}>
-            <TabsList className="grid w-full max-w-md grid-cols-2 mb-4">
-              <TabsTrigger value="transformed" className="flex items-center gap-2">
-                Transformed Data
-                <Badge variant="secondary" className="text-xs">With Transformations</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="raw" className="flex items-center gap-2">
-                Raw Data
-                <Badge variant="outline" className="text-xs">Original</Badge>
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="transformed">
-              {renderTable(allData, false)}
-            </TabsContent>
-            <TabsContent value="raw">
-              {renderTable(allRawData, true)}
-            </TabsContent>
-          </Tabs>
-        ) : (
-          renderTable(allData, false)
-        )}
+        {renderTable(allData, false)}
       </CardContent>
     </Card>
   );
