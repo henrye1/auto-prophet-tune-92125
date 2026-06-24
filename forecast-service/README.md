@@ -23,3 +23,9 @@ pytest -v
    (Supabase dashboard → Project Settings → API / JWT secret).
 4. Use the **Standard** plan or larger — AutoGluon needs the RAM.
 5. Copy the service URL into the frontend `.env` as `VITE_FORECAST_SERVICE_URL`.
+
+## Security note
+
+`SUPABASE_SERVICE_ROLE_KEY` bypasses RLS and must live ONLY in the Render
+service env — never in the frontend or committed to git. The browser only
+ever uses the anon key and the user's own JWT.
