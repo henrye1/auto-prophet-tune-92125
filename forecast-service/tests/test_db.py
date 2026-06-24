@@ -31,6 +31,9 @@ def test_create_job_posts_and_returns_id(monkeypatch):
     assert captured["json"]["model"] == "prophet"
     assert captured["json"]["status"] == "pending"
     assert captured["headers"]["apikey"] == "service-key"
+    assert captured["headers"]["Authorization"] == "Bearer service-key"
+    assert captured["headers"]["Prefer"] == "return=representation"
+    assert captured["json"]["progress"] == 0
 
 
 def test_update_job_patches_with_filter(monkeypatch):
@@ -44,9 +47,14 @@ def test_update_job_patches_with_filter(monkeypatch):
     def fake_patch(url, headers=None, json=None, timeout=None):
         captured["url"] = url
         captured["json"] = json
+        captured["headers"] = headers
         return FakeResp()
 
     monkeypatch.setattr(httpx, "patch", fake_patch)
     db.update_job("job-1", {"status": "completed", "progress": 100})
     assert "id=eq.job-1" in captured["url"]
+    assert captured["headers"]["apikey"] == "service-key"
+    assert captured["headers"]["Authorization"] == "Bearer service-key"
+    assert captured["headers"]["Content-Type"] == "application/json"
     assert captured["json"]["status"] == "completed"
+    assert captured["json"]["progress"] == 100
