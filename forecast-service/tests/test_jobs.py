@@ -122,6 +122,7 @@ def test_benchmark_attached(monkeypatch):
     seg = captured[-1]["results"]["segments"][0]
     assert seg["benchmark_model"] == "autogluon"
     assert seg["benchmark_test_data"] and seg["benchmark_forecast_data"]
+    assert seg["benchmark_training_data"], "benchmark_training_data should be truthy"
     assert seg["benchmark_metrics"] == {"mae": 0.1}
 
 
@@ -139,5 +140,7 @@ def test_benchmark_failure_keeps_primary(monkeypatch):
     final = captured[-1]
     seg = final["results"]["segments"][0]
     assert "benchmark_model" not in seg          # benchmark omitted
+    assert seg["training_data"], "primary training_data should be truthy after benchmark failure"
     assert seg["test_data"]                        # primary intact
+    assert seg["forecast_data"], "primary forecast_data should be truthy after benchmark failure"
     assert final["status"] == "completed"
