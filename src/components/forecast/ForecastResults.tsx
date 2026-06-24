@@ -338,7 +338,7 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                   Complete Time Series
                 </CardTitle>
                 <CardDescription>
-                  Training data, test predictions, and future forecast with transformations applied
+                  Training data, test predictions, and future forecast
                 </CardDescription>
               </CardHeader>
               <CardContent>
