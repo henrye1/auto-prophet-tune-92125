@@ -4,10 +4,10 @@ import jwt
 import pytest
 from fastapi import HTTPException
 
-os.environ["SUPABASE_JWT_SECRET"] = "test-secret"
+os.environ["SUPABASE_JWT_SECRET"] = "test-secret-that-is-long-enough!!"
 from app.auth import verify_token  # noqa: E402
 
-SECRET = "test-secret"
+SECRET = "test-secret-that-is-long-enough!!"
 
 
 def _token(sub="user-123", exp_delta=3600, aud="authenticated"):
@@ -29,3 +29,10 @@ def test_malformed_token_raises_401():
     with pytest.raises(HTTPException) as e:
         verify_token("not-a-jwt")
     assert e.value.status_code == 401
+
+
+def test_missing_secret_raises_500(monkeypatch):
+    monkeypatch.delenv("SUPABASE_JWT_SECRET", raising=False)
+    with pytest.raises(HTTPException) as e:
+        verify_token(_token())
+    assert e.value.status_code == 500
