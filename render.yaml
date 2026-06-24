@@ -27,7 +27,7 @@ services:
     staticPublishPath: ./dist
     routes:
       - type: rewrite
-        path: /*
+        source: /*
         destination: /index.html
     envVars:
       - key: NODE_VERSION
