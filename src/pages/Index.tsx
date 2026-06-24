@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { ModelSelector } from "@/components/forecast/ModelSelector";
 import { VariableConfig } from "@/components/forecast/VariableConfig";
 import { ProphetHyperparameters } from "@/components/forecast/ProphetHyperparameters";
@@ -32,6 +35,8 @@ const Index = () => {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("upload");
   const [selectedModel, setSelectedModel] = useState<ForecastModel>("prophet");
+  const [benchmarkEnabled, setBenchmarkEnabled] = useState(false);
+  const [benchmarkModel, setBenchmarkModel] = useState<ForecastModel>("autogluon");
   const [dateColumn, setDateColumn] = useState("");
   const [segmentColumn, setSegmentColumn] = useState("");
   const [dependentVariable, setDependentVariable] = useState("");
@@ -337,6 +342,8 @@ const Index = () => {
         segment_column: segmentColumn,
         dependent_variable: dependentVariable,
         metrics: selectedMetrics,
+        benchmark_model:
+          benchmarkEnabled && benchmarkModel !== selectedModel ? benchmarkModel : undefined,
         data: csvData,
         segments: segments.map((s) => ({
           segmentValue: s.segmentValue,
@@ -434,6 +441,44 @@ const Index = () => {
 
           <TabsContent value="model" className="space-y-6">
             <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Benchmark Comparison</CardTitle>
+                <CardDescription>
+                  Optionally fit a second model to compare side by side. Note: an AutoGluon
+                  benchmark roughly doubles run time.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <Switch
+                    id="benchmark-toggle"
+                    checked={benchmarkEnabled}
+                    onCheckedChange={setBenchmarkEnabled}
+                  />
+                  <Label htmlFor="benchmark-toggle">Compare against a benchmark model</Label>
+                </div>
+                {benchmarkEnabled && (
+                  <div className="space-y-2 max-w-xs">
+                    <Label htmlFor="benchmark-model">Benchmark model</Label>
+                    <Select value={benchmarkModel} onValueChange={(v) => setBenchmarkModel(v as ForecastModel)}>
+                      <SelectTrigger id="benchmark-model">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover">
+                        <SelectItem value="prophet">Facebook Prophet</SelectItem>
+                        <SelectItem value="autogluon">AWS AutoGluon</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {benchmarkModel === selectedModel && (
+                      <p className="text-xs text-destructive">
+                        Pick a model different from the primary ({selectedModel}).
+                      </p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
             <div className="flex justify-end">
               <Button onClick={() => setActiveTab("variables")}>
                 Next: Configure Variables

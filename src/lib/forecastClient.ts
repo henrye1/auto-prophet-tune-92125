@@ -19,6 +19,7 @@ export interface ForecastJobPayload {
   segments: ForecastSegmentSpec[];
   data: any[];
   metrics: string[];
+  benchmark_model?: string;
 }
 
 const SERVICE_URL = import.meta.env.VITE_FORECAST_SERVICE_URL as string;
