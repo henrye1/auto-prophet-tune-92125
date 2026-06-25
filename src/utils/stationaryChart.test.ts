@@ -81,6 +81,7 @@ describe("toStationaryRows", () => {
     expect(out.rows).toHaveLength(rows.length);
     expect(out.rows[0].actual).toBeCloseTo(Math.log(10), 6);
     expect(out.rows[0].ci_base).toBeCloseTo(Math.log(9), 6);
+    expect(out.rows[0].ci_span).toBeCloseTo(Math.log(11) - Math.log(9), 6);
   });
 
   it("applies difference, drops band and one leading date", () => {
@@ -93,6 +94,16 @@ describe("toStationaryRows", () => {
     // actual diff: 20 - 10 = 10
     expect(out.rows[0].actual).toBe(10);
     // band suppressed
+    expect(out.rows[0].ci_base).toBeNull();
+    expect(out.rows[0].ci_span).toBeNull();
+  });
+
+  it("applies standardize, omits band, preserves length", () => {
+    const rows = buildChartRows(seg);
+    const out = toStationaryRows(rows, [{ type: "standardize" }]);
+    expect(out.applied).toBe(true);
+    expect(out.showBand).toBe(false);
+    expect(out.rows).toHaveLength(rows.length);
     expect(out.rows[0].ci_base).toBeNull();
     expect(out.rows[0].ci_span).toBeNull();
   });

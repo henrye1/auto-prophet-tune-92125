@@ -18,7 +18,12 @@ export interface StationaryResult {
   showBand: boolean;
 }
 
-const LENGTH_PRESERVING = new Set(["log", "box_cox", "standardize"]);
+// Transforms whose confidence band can be re-expressed meaningfully: element-wise
+// and monotonic, so transforming the lower/upper bounds keeps a valid interval.
+// `standardize` is excluded — it rescales each series by its own mean/std, so a
+// shared band axis is not meaningful; `difference`/`seasonal_difference` change
+// length and differencing an interval is not meaningful.
+const BAND_SAFE = new Set(["log", "box_cox"]);
 
 const isNum = (v: any): v is number =>
   typeof v === "number" && !isNaN(v) && isFinite(v);
@@ -72,15 +77,11 @@ export function buildChartRows(segment: SegmentForecastResult): ChartRow[] {
   });
 }
 
-const NUMERIC_COLS: Array<keyof ChartRow> = [
-  "actual",
-  "fitted",
-  "forecast",
-  "benchFitted",
-  "benchForecast",
-  "ci_base",
-  "ci_span",
-];
+const numCol = (rows: ChartRow[], key: keyof ChartRow): number[] =>
+  rows.map((r) => {
+    const v = r[key];
+    return isNum(v) ? (v as number) : NaN;
+  });
 
 export function toStationaryRows(
   rows: ChartRow[],
@@ -91,35 +92,55 @@ export function toStationaryRows(
     return { rows: [], applied: false, showBand: false };
   }
 
-  const showBand = active.every((t) => LENGTH_PRESERVING.has(t.type));
+  const showBand = active.every((t) => BAND_SAFE.has(t.type));
 
-  const transformCol = (key: keyof ChartRow): Array<number | null> => {
-    const raw: number[] = rows.map((r) => {
-      const v = r[key];
-      return isNum(v) ? (v as number) : NaN;
-    });
-    let out = raw;
-    for (const t of active) {
-      out = applyTransformation(out, t.type, t.parameters);
-    }
+  const transformArr = (arr: number[]): Array<number | null> => {
+    let out = arr;
+    for (const t of active) out = applyTransformation(out, t.type, t.parameters);
     return out.map((v) => (isNum(v) ? v : null));
   };
 
-  const transformed: Record<string, Array<number | null>> = {};
-  for (const c of NUMERIC_COLS) transformed[c] = transformCol(c);
+  const actual = transformArr(numCol(rows, "actual"));
+  const fitted = transformArr(numCol(rows, "fitted"));
+  const forecast = transformArr(numCol(rows, "forecast"));
+  const benchFitted = transformArr(numCol(rows, "benchFitted"));
+  const benchForecast = transformArr(numCol(rows, "benchForecast"));
 
-  const k = rows.length - transformed["actual"].length; // leading dates removed
+  // Band: transform the bound LEVELS (lower, upper) and recompute base/span in
+  // the transformed domain, so the band reflects T(upper) - T(lower) rather than
+  // T(upper - lower).
+  let ciBase: Array<number | null> = [];
+  let ciSpan: Array<number | null> = [];
+  if (showBand) {
+    const lower = transformArr(numCol(rows, "ci_base"));
+    const upper = transformArr(
+      rows.map((r) =>
+        isNum(r.ci_base) && isNum(r.ci_span)
+          ? (r.ci_base as number) + (r.ci_span as number)
+          : NaN,
+      ),
+    );
+    ciBase = lower;
+    ciSpan = lower.map((lo, i) =>
+      isNum(lo) && isNum(upper[i]) ? (upper[i] as number) - (lo as number) : null,
+    );
+  }
+
+  // All columns share the same active chain, so they drop the same number of
+  // leading rows (e.g. `difference` drops 1, `seasonal_difference` drops the
+  // period). Derive that offset from any column and trim the date axis to match.
+  const k = rows.length - actual.length;
   const dates = rows.slice(k).map((r) => r.date);
 
   const outRows: ChartRow[] = dates.map((date, i) => ({
     date,
-    actual: transformed["actual"][i],
-    fitted: transformed["fitted"][i],
-    forecast: transformed["forecast"][i],
-    benchFitted: transformed["benchFitted"][i],
-    benchForecast: transformed["benchForecast"][i],
-    ci_base: showBand ? transformed["ci_base"][i] : null,
-    ci_span: showBand ? transformed["ci_span"][i] : null,
+    actual: actual[i] ?? null,
+    fitted: fitted[i] ?? null,
+    forecast: forecast[i] ?? null,
+    benchFitted: benchFitted[i] ?? null,
+    benchForecast: benchForecast[i] ?? null,
+    ci_base: showBand ? ciBase[i] ?? null : null,
+    ci_span: showBand ? ciSpan[i] ?? null : null,
   }));
 
   return { rows: outRows, applied: true, showBand };
