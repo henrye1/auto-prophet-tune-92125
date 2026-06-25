@@ -15,10 +15,12 @@ import { toast } from "sonner";
 import html2canvas from "html2canvas";
 import type { ForecastResults as ForecastResultsType } from "@/types/forecastResults";
 import type { PerformanceMetric } from "@/types/forecast";
+import { buildChartRows, toStationaryRows } from "@/utils/stationaryChart";
 
 interface ForecastResultsProps {
   results: ForecastResultsType;
   selectedMetrics: PerformanceMetric[];
+  segmentAnalysisStates?: Record<string, Record<string, any>>;
 }
 
 const metricLabels: Record<PerformanceMetric, string> = {
@@ -33,7 +35,7 @@ const metricLabels: Record<PerformanceMetric, string> = {
   mase: "MASE",
 };
 
-export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsProps) => {
+export const ForecastResults = ({ results, selectedMetrics, segmentAnalysisStates }: ForecastResultsProps) => {
   const [exportDialog, setExportDialog] = useState(false);
   const [reportName, setReportName] = useState("");
   const [exportFormat, setExportFormat] = useState<"csv" | "html" | "pdf">("pdf");
@@ -381,42 +383,19 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                     <div className="w-3 h-3 rounded-full bg-purple-600 mr-2" />
                     Forecast
                   </Badge>
+                  {segment.benchmark_model && (
+                    <Badge variant="outline" className="bg-teal-500/10 border-teal-500/30">
+                      <div className="w-3 h-3 rounded-full bg-teal-600 mr-2" />
+                      Challenger ({segment.benchmark_model})
+                    </Badge>
+                  )}
                   <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/30">
                     <div className="w-3 h-3 bg-emerald-600/40 mr-2" />
                     {((segment.interval_width ?? 0.8) * 100).toFixed(0)}% Confidence
                   </Badge>
                 </div>
                   <ResponsiveContainer width="100%" height={400}>
-                    <ComposedChart data={(() => {
-                      const trainingData = segment.training_data || [];
-                      const testData = segment.test_data || [];
-                      const forecastData = segment.forecast_data || [];
-                      const allData = [...trainingData, ...testData, ...forecastData];
-                      
-                      return allData.map((point, idx) => {
-                        const testStartIdx = trainingData.length;
-                        const testEndIdx = testStartIdx + testData.length;
-                        const forecastStartIdx = testEndIdx;
-                        
-                        let fitted = null;
-                        let forecast = null;
-                        
-                        if (idx >= testStartIdx && idx < testEndIdx) {
-                          fitted = point.predicted;
-                        } else if (idx >= forecastStartIdx) {
-                          forecast = point.predicted;
-                        }
-                        
-                        return {
-                          date: point.date,
-                          actual: isValidNumber(point.actual) ? point.actual : null,
-                          fitted: isValidNumber(fitted) ? fitted : null,
-                          forecast: isValidNumber(forecast) ? forecast : null,
-                          ci_base: (isValidNumber(point.lower_bound) && isValidNumber(point.upper_bound)) ? point.lower_bound : null,
-                          ci_span: (isValidNumber(point.lower_bound) && isValidNumber(point.upper_bound)) ? point.upper_bound - point.lower_bound : null,
-                        };
-                      });
-                    })()}>
+                    <ComposedChart data={buildChartRows(segment)}>
                     <defs>
                       <linearGradient id={`confidenceGradient-transformed-${segment.segment}`} x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="rgb(16, 185, 129)" stopOpacity={0.3} />
@@ -497,6 +476,30 @@ export const ForecastResults = ({ results, selectedMetrics }: ForecastResultsPro
                       name="Forecast"
                       connectNulls={true}
                     />
+                    {segment.benchmark_model && (
+                      <Line
+                        type="monotone"
+                        dataKey="benchFitted"
+                        stroke="rgb(13, 148, 136)"
+                        strokeWidth={2}
+                        strokeDasharray="2 2"
+                        dot={false}
+                        name={`Challenger Fitted (${segment.benchmark_model})`}
+                        connectNulls={true}
+                      />
+                    )}
+                    {segment.benchmark_model && (
+                      <Line
+                        type="monotone"
+                        dataKey="benchForecast"
+                        stroke="rgb(13, 148, 136)"
+                        strokeWidth={2}
+                        strokeDasharray="2 6"
+                        dot={false}
+                        name={`Challenger Forecast (${segment.benchmark_model})`}
+                        connectNulls={true}
+                      />
+                    )}
                   </ComposedChart>
                 </ResponsiveContainer>
               </CardContent>

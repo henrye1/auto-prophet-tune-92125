@@ -722,7 +722,7 @@ const Index = () => {
           <TabsContent value="results" className="space-y-6">
             {forecastResults && (
               <>
-                <ForecastResults results={forecastResults} selectedMetrics={selectedMetrics} />
+                <ForecastResults results={forecastResults} selectedMetrics={selectedMetrics} segmentAnalysisStates={segmentAnalysisStates} />
                 <ModelDownload
                   modelId={currentModelId}
                   modelName={currentModelName || "Untitled Model"}
